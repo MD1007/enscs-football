@@ -99,20 +99,22 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
             </div>
 
             {/* Score */}
-            <div className="col-span-1 text-center">
+            <div className="col-span-1 text-center flex items-center justify-center">
               {match.status === 'finished' || match.status === 'live' ? (
-                <div>
-                  <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white px-3 py-1 rounded-xl bg-pitch-dark border border-white/10 shadow-inner">
-                    {match.home_score ?? 0} - {match.away_score ?? 0}
+                <div className="flex flex-col items-center">
+                  <div className="text-2xl sm:text-4xl font-black font-mono tracking-tight text-white px-3 sm:px-4 py-1 rounded-xl bg-pitch-dark border border-white/10 shadow-inner whitespace-nowrap inline-flex items-center justify-center gap-1.5">
+                    <span>{match.home_score ?? 0}</span>
+                    <span className="text-emerald-400 font-bold">:</span>
+                    <span>{match.away_score ?? 0}</span>
                   </div>
                   {match.home_penalties !== null && match.away_penalties !== null && (
-                    <div className="text-[11px] font-semibold text-amber-400 mt-1">
+                    <div className="text-[11px] font-semibold text-amber-400 mt-1 whitespace-nowrap">
                       (Pen: {match.home_penalties} - {match.away_penalties})
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-sm font-semibold text-slate-400 bg-white/5 py-1.5 px-3 rounded-lg border border-white/5">
+                <div className="text-sm font-semibold text-slate-400 bg-white/5 py-1.5 px-3 rounded-lg border border-white/5 whitespace-nowrap">
                   VS
                 </div>
               )}

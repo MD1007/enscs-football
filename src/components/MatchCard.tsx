@@ -93,11 +93,11 @@ export default function MatchCard({ match }: MatchCardProps) {
         </div>
 
         {/* Teams and Score Body */}
-        <div className="grid grid-cols-12 items-center gap-2 py-1">
+        <div className="flex items-center justify-between gap-2 py-1">
           {/* Home Team */}
-          <div className="col-span-5 flex items-center justify-end space-x-2 sm:space-x-3 text-right">
+          <div className="flex-1 min-w-0 flex items-center justify-end space-x-2 sm:space-x-3 text-right">
             <span
-              className="font-bold text-sm sm:text-base text-white tracking-tight leading-snug truncate"
+              className="font-bold text-xs sm:text-base text-white tracking-tight leading-snug truncate"
               dir="auto"
               title={match.home_team_name || 'TBD'}
             >
@@ -112,27 +112,29 @@ export default function MatchCard({ match }: MatchCardProps) {
           </div>
 
           {/* Score or VS */}
-          <div className="col-span-2 flex flex-col items-center justify-center">
+          <div className="flex-shrink-0 px-1 sm:px-2 flex flex-col items-center justify-center">
             {match.status === 'finished' || match.status === 'live' ? (
               <div className="flex flex-col items-center">
-                <div className="font-mono font-black text-lg sm:text-xl text-white px-2.5 py-1 rounded-lg bg-pitch-darkest border border-white/10 shadow-inner">
-                  {match.home_score ?? 0} : {match.away_score ?? 0}
+                <div className="inline-flex items-center justify-center whitespace-nowrap font-mono font-black text-base sm:text-xl text-white px-3 sm:px-3.5 py-1 sm:py-1.5 rounded-xl bg-pitch-darkest border border-white/10 shadow-inner">
+                  <span>{match.home_score ?? 0}</span>
+                  <span className="text-emerald-400 mx-1.5 font-bold">:</span>
+                  <span>{match.away_score ?? 0}</span>
                 </div>
                 {match.home_penalties !== null && match.away_penalties !== null && (
-                  <span className="text-[9px] text-amber-400 font-mono mt-0.5">
+                  <span className="text-[9px] text-amber-400 font-mono mt-0.5 whitespace-nowrap">
                     ({match.home_penalties}-{match.away_penalties}p)
                   </span>
                 )}
               </div>
             ) : (
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest px-2 py-1 rounded bg-white/5">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest px-2.5 py-1 rounded bg-white/5 whitespace-nowrap">
                 VS
               </span>
             )}
           </div>
 
           {/* Away Team */}
-          <div className="col-span-5 flex items-center justify-start space-x-2 sm:space-x-3 text-left">
+          <div className="flex-1 min-w-0 flex items-center justify-start space-x-2 sm:space-x-3 text-left">
             <div
               className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-xs text-white shadow-sm flex-shrink-0"
               style={{ backgroundColor: match.away_team_color || '#3B82F6' }}
@@ -140,7 +142,7 @@ export default function MatchCard({ match }: MatchCardProps) {
               <Shield className="w-4 h-4 opacity-90" />
             </div>
             <span
-              className="font-bold text-sm sm:text-base text-white tracking-tight leading-snug truncate"
+              className="font-bold text-xs sm:text-base text-white tracking-tight leading-snug truncate"
               dir="auto"
               title={match.away_team_name || 'TBD'}
             >

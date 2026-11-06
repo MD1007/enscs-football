@@ -149,8 +149,10 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
           <div className="md:col-span-1 flex flex-col items-center justify-center">
             {match.status === 'finished' || match.status === 'live' ? (
               <div className="text-center">
-                <div className="font-mono font-black text-4xl sm:text-6xl text-white px-5 py-2 rounded-2xl bg-pitch-darkest border border-white/10 shadow-inner">
-                  {match.home_score ?? 0} : {match.away_score ?? 0}
+                <div className="font-mono font-black text-3xl sm:text-6xl text-white px-4 sm:px-6 py-2 rounded-2xl bg-pitch-darkest border border-white/10 shadow-inner whitespace-nowrap inline-flex items-center justify-center gap-2">
+                  <span>{match.home_score ?? 0}</span>
+                  <span className="text-emerald-400">:</span>
+                  <span>{match.away_score ?? 0}</span>
                 </div>
                 {match.home_penalties !== null && match.away_penalties !== null && (
                   <span className="text-xs text-amber-400 font-mono font-bold mt-2 block">
