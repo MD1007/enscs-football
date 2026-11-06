@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: enscs-champions
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        value: mahdidhmn-enscs-secret-key-2026-production
