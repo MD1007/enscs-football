@@ -16,6 +16,8 @@ import {
   Flame,
   Award,
   Filter,
+  Crown,
+  Star,
 } from 'lucide-react';
 
 export default function AdminMatchesPage() {
@@ -48,6 +50,7 @@ function AdminMatchesContent() {
   const [homePenalties, setHomePenalties] = useState<string>('');
   const [awayPenalties, setAwayPenalties] = useState<string>('');
   const [status, setStatus] = useState<string>('finished');
+  const [mvpPlayerId, setMvpPlayerId] = useState<number | null>(null);
   const [scheduledTime, setScheduledTime] = useState<string>('');
   const [venue, setVenue] = useState<string>('');
   const [events, setEvents] = useState<
@@ -159,6 +162,7 @@ function AdminMatchesContent() {
     setHomePenalties(match.home_penalties !== null && match.home_penalties !== undefined ? match.home_penalties.toString() : '');
     setAwayPenalties(match.away_penalties !== null && match.away_penalties !== undefined ? match.away_penalties.toString() : '');
     setStatus(match.status || 'finished');
+    setMvpPlayerId(match.mvp_player_id || null);
     setScheduledTime(match.scheduled_time || '');
     setVenue(match.venue || 'Terrain ENSCS');
 
@@ -224,6 +228,7 @@ function AdminMatchesContent() {
         home_penalties: homePenalties !== '' ? parseInt(homePenalties) : null,
         away_penalties: awayPenalties !== '' ? parseInt(awayPenalties) : null,
         status: status,
+        mvp_player_id: mvpPlayerId,
         scheduled_time: scheduledTime,
         venue: venue,
         events: events.map((e) => ({
@@ -706,6 +711,49 @@ function AdminMatchesContent() {
                   ))
                 )}
               </div>
+            </div>
+
+            {/* Official Match MVP (Man of the Match) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Crown className="w-4 h-4 text-amber-400" />
+                  <h4 className="font-bold text-white text-xs uppercase tracking-wider">
+                    ⭐ Man of the Match (MVP)
+                  </h4>
+                </div>
+                <span className="text-[10px] text-amber-300 font-semibold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+                  MVP Award
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Pick the most outstanding player of this match. Points count towards the official Tournament MVP leaderboard!
+              </p>
+              <select
+                value={mvpPlayerId || ''}
+                onChange={(e) => setMvpPlayerId(e.target.value ? parseInt(e.target.value) : null)}
+                className="w-full bg-pitch-darkest border border-amber-500/40 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:border-amber-400"
+              >
+                <option value="">-- No MVP Selected --</option>
+                <optgroup label={`🔵 ${editingMatch.home_team_name || 'Home Team'}`}>
+                  {players
+                    .filter((p) => p.team_id === editingMatch.home_team_id)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.is_captain ? '(C)' : ''} ({editingMatch.home_team_name})
+                      </option>
+                    ))}
+                </optgroup>
+                <optgroup label={`🔴 ${editingMatch.away_team_name || 'Away Team'}`}>
+                  {players
+                    .filter((p) => p.team_id === editingMatch.away_team_id)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.is_captain ? '(C)' : ''} ({editingMatch.away_team_name})
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
             </div>
 
             {/* Modal Actions */}

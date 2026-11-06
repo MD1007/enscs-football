@@ -56,10 +56,14 @@ export function getFullTournamentData(): TournamentData {
   const matchesRaw = db.prepare(`
     SELECT m.*,
            ht.name as home_team_name, ht.color as home_team_color,
-           at.name as away_team_name, at.color as away_team_color
+           at.name as away_team_name, at.color as away_team_color,
+           mp.name as mvp_player_name,
+           mt.name as mvp_team_name
     FROM matches m
     LEFT JOIN teams ht ON m.home_team_id = ht.id
     LEFT JOIN teams at ON m.away_team_id = at.id
+    LEFT JOIN players mp ON m.mvp_player_id = mp.id
+    LEFT JOIN teams mt ON mp.team_id = mt.id
     ORDER BY CASE 
                WHEN m.stage = 'group' THEN 1 
                WHEN m.stage = 'semi_final' THEN 2 
@@ -109,7 +113,7 @@ export function getFullTournamentData(): TournamentData {
 
   const best_second = calculateBestSecondPlace(standings);
 
-  const { topScorers, topAssists, yellowCards, redCards } = aggregatePlayerStats(
+  const { playersWithStats, topScorers, topAssists, topMVPs, yellowCards, redCards } = aggregatePlayerStats(
     playersRaw.map((p) => ({ ...p, is_captain: Boolean(p.is_captain) })),
     teams,
     matches
@@ -133,7 +137,7 @@ export function getFullTournamentData(): TournamentData {
 
   return {
     teams,
-    players: playersRaw,
+    players: playersWithStats,
     matches,
     rules,
     settings,
@@ -141,6 +145,7 @@ export function getFullTournamentData(): TournamentData {
     best_second,
     top_scorers: topScorers,
     top_assists: topAssists,
+    top_mvps: topMVPs,
     yellow_cards: yellowCards,
     red_cards: redCards,
     summary: {
@@ -195,6 +200,7 @@ export function updateMatchResult(
     away_penalties?: number | null;
     status: string;
     winner_team_id?: number | null;
+    mvp_player_id?: number | null;
     events: Array<{
       player_id: number;
       team_id: number;
@@ -224,7 +230,8 @@ export function updateMatchResult(
           home_penalties = ?,
           away_penalties = ?,
           status = ?,
-          winner_team_id = ?
+          winner_team_id = ?,
+          mvp_player_id = ?
       WHERE id = ?
     `).run(
       data.home_score,
@@ -233,6 +240,7 @@ export function updateMatchResult(
       data.away_penalties || null,
       data.status,
       data.winner_team_id || null,
+      data.mvp_player_id !== undefined ? data.mvp_player_id : null,
       matchId
     );
 

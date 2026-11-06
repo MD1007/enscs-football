@@ -191,6 +191,31 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
             </div>
           </div>
         </div>
+
+        {/* Official MVP Highlight */}
+        {match.mvp_player_name && (
+          <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/5 to-transparent border border-amber-500/30">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-xl shadow-glow">
+                ⭐
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <span>Official Man of the Match (MVP)</span>
+                  <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">AWARD</span>
+                </span>
+                <span className="text-lg font-black text-white" dir="auto">
+                  {match.mvp_player_name}
+                </span>
+              </div>
+            </div>
+            {match.mvp_team_name && (
+              <span className="text-xs font-bold text-slate-300 px-3.5 py-1.5 rounded-xl bg-pitch-darkest border border-white/10" dir="auto">
+                {match.mvp_team_name}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Events & Match Timeline */}
@@ -357,6 +382,31 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
             </div>
           </div>
         </div>
+
+        {/* Official MVP Highlight */}
+        {match.mvp_player_name && (
+          <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/5 to-transparent border border-amber-500/30">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-xl shadow-glow">
+                ⭐
+              </div>
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <span>Official Man of the Match (MVP)</span>
+                  <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">AWARD</span>
+                </span>
+                <span className="text-lg font-black text-white" dir="auto">
+                  {match.mvp_player_name}
+                </span>
+              </div>
+            </div>
+            {match.mvp_team_name && (
+              <span className="text-xs font-bold text-slate-300 px-3.5 py-1.5 rounded-xl bg-pitch-darkest border border-white/10" dir="auto">
+                {match.mvp_team_name}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

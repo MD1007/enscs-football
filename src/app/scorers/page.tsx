@@ -36,7 +36,20 @@ export default function ScorersPage() {
                 <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1" dir="auto">
                   {leader.player.name}
                 </h2>
-                <div className="flex items-center space-x-2 text-xs text-slate-300 mt-1">
+                {leader.player.nicknames && leader.player.nicknames.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {leader.player.nicknames.map((nick, nIdx) => (
+                      <span
+                        key={nIdx}
+                        className="text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg bg-amber-400 text-pitch-darkest shadow-md flex items-center space-x-1"
+                        title={nick.subtitle}
+                      >
+                        <span>{nick.title}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center space-x-2 text-xs text-slate-300 mt-2">
                   <Shield className="w-3.5 h-3.5 text-slate-400" />
                   <span dir="auto">{leader.player.team_name}</span>
                 </div>
@@ -100,11 +113,26 @@ export default function ScorersPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
-                        <span className="hover:text-emerald-400 transition">{item.player.name}</span>
-                        {item.player.is_captain && (
-                          <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
-                            (C)
-                          </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="hover:text-emerald-400 transition">{item.player.name}</span>
+                          {item.player.is_captain && (
+                            <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
+                              (C)
+                            </span>
+                          )}
+                        </div>
+                        {item.player.nicknames && item.player.nicknames.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {item.player.nicknames.map((nick, nIdx) => (
+                              <span
+                                key={nIdx}
+                                className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                title={nick.subtitle}
+                              >
+                                {nick.title}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">

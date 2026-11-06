@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Clock,
   Sparkles,
+  Crown,
+  Star,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,7 @@ export default function HomePage() {
 
   const topScorer = top_scorers.length > 0 ? top_scorers[0] : null;
   const topAssister = top_assists.length > 0 ? top_assists[0] : null;
+  const topMvp = data.top_mvps && data.top_mvps.length > 0 ? data.top_mvps[0] : null;
 
   const leaderA = standings.A?.[0];
   const leaderB = standings.B?.[0];
@@ -231,56 +234,114 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Golden Boot & Playmaker Spotlight */}
+          {/* Player Honors & Accolades Spotlight */}
           <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-pitch-border space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Player Honors</span>
-            <h3 className="text-xl font-black text-white tracking-tight uppercase">Tournament Stars</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Player Honors</span>
+                <h3 className="text-xl font-black text-white tracking-tight uppercase">Tournament Stars</h3>
+              </div>
+              <Link href="/mvps" className="text-xs font-bold text-amber-400 hover:text-amber-300 transition flex items-center space-x-1">
+                <span>View MVPs</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
 
             {/* Top Scorer */}
-            <div className="p-4 rounded-2xl bg-pitch-card border border-amber-500/30 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center">
-                  <Flame className="w-5 h-5 text-amber-400" />
+            <Link href="/scorers" className="block p-4 rounded-2xl bg-pitch-card hover:bg-pitch-cardHover border border-amber-500/30 transition">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center flex-shrink-0">
+                    <Flame className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Top Goalscorer</span>
+                      {topScorer?.player.nicknames?.[0] && (
+                        <span className="text-[9px] bg-amber-400 text-pitch-darkest px-1.5 py-0.2 rounded font-black">
+                          {topScorer.player.nicknames[0].title}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-sm text-white" dir="auto">
+                      {topScorer ? topScorer.player.name : 'No goals yet'}
+                    </div>
+                    <div className="text-xs text-slate-400" dir="auto">
+                      {topScorer ? topScorer.player.team_name : '-'}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Top Goalscorer</div>
-                  <div className="font-bold text-sm text-white" dir="auto">
-                    {topScorer ? topScorer.player.name : 'No goals yet'}
-                  </div>
-                  <div className="text-xs text-slate-400" dir="auto">
-                    {topScorer ? topScorer.player.team_name : '-'}
-                  </div>
+                <div className="text-right">
+                  <span className="font-mono font-black text-xl text-amber-400">
+                    {topScorer ? `${topScorer.goals} ⚽` : '0'}
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="font-mono font-black text-xl text-amber-400">
-                  {topScorer ? `${topScorer.goals} ⚽` : '0'}
-                </span>
-              </div>
-            </div>
+            </Link>
 
             {/* Top Assister */}
-            <div className="p-4 rounded-2xl bg-pitch-card border border-blue-500/30 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center">
-                  <Award className="w-5 h-5 text-blue-400" />
+            <Link href="/assists" className="block p-4 rounded-2xl bg-pitch-card hover:bg-pitch-cardHover border border-blue-500/30 transition">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center flex-shrink-0">
+                    <Award className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-blue-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Top Playmaker</span>
+                      {topAssister?.player.nicknames?.[0] && (
+                        <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded font-black">
+                          {topAssister.player.nicknames[0].title}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-sm text-white" dir="auto">
+                      {topAssister ? topAssister.player.name : 'No assists yet'}
+                    </div>
+                    <div className="text-xs text-slate-400" dir="auto">
+                      {topAssister ? topAssister.player.team_name : '-'}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-[10px] font-bold text-blue-300 uppercase tracking-wider">Top Playmaker</div>
-                  <div className="font-bold text-sm text-white" dir="auto">
-                    {topAssister ? topAssister.player.name : 'No assists yet'}
-                  </div>
-                  <div className="text-xs text-slate-400" dir="auto">
-                    {topAssister ? topAssister.player.team_name : '-'}
-                  </div>
+                <div className="text-right">
+                  <span className="font-mono font-black text-xl text-blue-400">
+                    {topAssister ? `${topAssister.assists} 👟` : '0'}
+                  </span>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="font-mono font-black text-xl text-blue-400">
-                  {topAssister ? `${topAssister.assists} 👟` : '0'}
-                </span>
+            </Link>
+
+            {/* Most MVPs */}
+            <Link href="/mvps" className="block p-4 rounded-2xl bg-pitch-card hover:bg-pitch-cardHover border border-purple-500/30 transition">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center flex-shrink-0">
+                    <Crown className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Tournament MVP</span>
+                      {topMvp?.player.nicknames?.[0] && (
+                        <span className="text-[9px] bg-purple-500 text-white px-1.5 py-0.2 rounded font-black">
+                          {topMvp.player.nicknames[0].title}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-sm text-white" dir="auto">
+                      {topMvp ? topMvp.player.name : 'No awards yet'}
+                    </div>
+                    <div className="text-xs text-slate-400" dir="auto">
+                      {topMvp ? topMvp.player.team_name : '-'}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono font-black text-xl text-purple-400">
+                    {topMvp ? `${topMvp.mvps} ⭐` : '0'}
+                  </span>
+                </div>
               </div>
-            </div>
+            </Link>
           </div>
         </section>
 

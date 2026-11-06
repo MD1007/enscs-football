@@ -43,6 +43,9 @@ export default function Footer() {
                 <Link href="/scorers" className="hover:text-emerald-400 transition">Top Scorers (Golden Boot)</Link>
               </li>
               <li>
+                <Link href="/mvps" className="hover:text-amber-400 transition">MVP Leaderboard ⭐</Link>
+              </li>
+              <li>
                 <Link href="/rules" className="hover:text-emerald-400 transition">Official Rules & Regulations</Link>
               </li>
             </ul>

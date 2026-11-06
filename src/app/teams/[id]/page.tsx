@@ -199,11 +199,26 @@ export default function TeamProfilePage({ params }: TeamPageProps) {
                         {idx + 1}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
-                        <span className="text-sm">{player.name}</span>
-                        {player.name_ar && player.name_ar !== player.name && (
-                          <span className="text-xs text-slate-400 ml-2 font-ar" dir="rtl">
-                            ({player.name_ar})
-                          </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm">{player.name}</span>
+                          {player.name_ar && player.name_ar !== player.name && (
+                            <span className="text-xs text-slate-400 font-ar" dir="rtl">
+                              ({player.name_ar})
+                            </span>
+                          )}
+                        </div>
+                        {player.nicknames && player.nicknames.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {player.nicknames.map((nick, nIdx) => (
+                              <span
+                                key={nIdx}
+                                className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                title={nick.subtitle}
+                              >
+                                {nick.title}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-center">

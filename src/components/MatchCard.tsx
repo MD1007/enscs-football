@@ -151,6 +151,22 @@ export default function MatchCard({ match }: MatchCardProps) {
           </div>
         </div>
 
+        {/* MVP Badge if selected */}
+        {match.mvp_player_name && (
+          <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between text-xs">
+            <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-amber-500/5 border border-amber-500/30 text-amber-300">
+              <span className="text-xs">⭐</span>
+              <span className="font-bold text-[10px] uppercase tracking-wider text-amber-400">MVP:</span>
+              <span className="font-semibold text-white truncate max-w-[140px] sm:max-w-[200px]" dir="auto">{match.mvp_player_name}</span>
+            </div>
+            {match.mvp_team_name && (
+              <span className="text-[10px] text-slate-400 truncate max-w-[100px]" dir="auto">
+                {match.mvp_team_name}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Card Footer: Date, Venue, Details link */}
         <div className="flex items-center justify-between text-xs text-slate-400 mt-4 pt-2.5 border-t border-white/5">
           <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">

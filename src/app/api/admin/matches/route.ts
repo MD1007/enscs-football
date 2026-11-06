@@ -11,7 +11,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { action, match_id, home_score, away_score, home_penalties, away_penalties, status, events, winner_team_id, scheduled_time, venue } = body;
+    const { action, match_id, home_score, away_score, home_penalties, away_penalties, status, events, winner_team_id, mvp_player_id, scheduled_time, venue } = body;
 
     if (!match_id) {
       return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
@@ -41,6 +41,7 @@ export async function PUT(request: Request) {
         away_penalties: away_penalties !== undefined && away_penalties !== '' ? Number(away_penalties) : null,
         status: status || 'finished',
         winner_team_id: winner_team_id ? Number(winner_team_id) : null,
+        mvp_player_id: mvp_player_id ? Number(mvp_player_id) : null,
         events: events || [],
       },
       admin.username

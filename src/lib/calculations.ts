@@ -212,11 +212,17 @@ export function aggregatePlayerStats(
       assists: 0,
       yellow_cards: 0,
       red_cards: 0,
+      mvps: 0,
+      nicknames: [],
     };
   });
 
-  // Collect all events from matches
+  // Collect all events and MVPs from matches
   for (const m of matches) {
+    if (m.mvp_player_id && playerMap[m.mvp_player_id]) {
+      playerMap[m.mvp_player_id].mvps = (playerMap[m.mvp_player_id].mvps || 0) + 1;
+    }
+
     if (!m.events) continue;
     for (const ev of m.events) {
       const p = playerMap[ev.player_id];
@@ -256,6 +262,65 @@ export function aggregatePlayerStats(
       rank: idx + 1,
     }));
 
+  // Top MVPs (mvps > 0)
+  const topMVPs = allPlayersWithStats
+    .filter((p) => (p.mvps || 0) > 0)
+    .sort((a, b) => (b.mvps || 0) - (a.mvps || 0) || a.name.localeCompare(b.name))
+    .map((player, idx) => ({
+      player,
+      mvps: player.mvps || 0,
+      rank: idx + 1,
+    }));
+
+  // Assign Hyping Nicknames
+  const maxGoals = topScorers.length > 0 ? topScorers[0].goals : 0;
+  const maxAssists = topAssists.length > 0 ? topAssists[0].assists : 0;
+  const maxMvps = topMVPs.length > 0 ? topMVPs[0].mvps : 0;
+
+  for (const player of allPlayersWithStats) {
+    player.nicknames = [];
+
+    // Top Scorer Nickname
+    if ((player.goals || 0) > 0 && player.goals === maxGoals) {
+      player.nicknames.push({
+        title: '⚡ EL CYBER GOLEADOR',
+        subtitle: 'Tournament Top Scorer',
+        color: 'amber',
+        icon: 'Flame',
+      });
+    }
+
+    // Top Assister Nickname
+    if ((player.assists || 0) > 0 && player.assists === maxAssists) {
+      player.nicknames.push({
+        title: '🪄 THE MASTER ARCHITECT',
+        subtitle: 'Tournament Assist King',
+        color: 'emerald',
+        icon: 'Award',
+      });
+    }
+
+    // Most MVP Nickname
+    if ((player.mvps || 0) > 0 && player.mvps === maxMvps) {
+      player.nicknames.push({
+        title: '👑 TOURNAMENT KINGPIN',
+        subtitle: 'Most Match MVPs',
+        color: 'purple',
+        icon: 'Crown',
+      });
+    }
+
+    // Triple Crown Easter Egg / Super Legend Title!
+    if (player.nicknames.length === 3) {
+      player.nicknames.unshift({
+        title: '🌟 THE CYBER GOAT',
+        subtitle: 'Triple Crown Master (Goals, Assists & MVPs)',
+        color: 'blue',
+        icon: 'Sparkles',
+      });
+    }
+  }
+
   // Yellow cards (count > 0)
   const yellowCards = allPlayersWithStats
     .filter((p) => (p.yellow_cards || 0) > 0)
@@ -280,6 +345,7 @@ export function aggregatePlayerStats(
     playersWithStats: allPlayersWithStats,
     topScorers,
     topAssists,
+    topMVPs,
     yellowCards,
     redCards,
   };

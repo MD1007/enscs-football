@@ -103,6 +103,12 @@ export function initDatabase() {
     );
   `);
 
+  try {
+    db.prepare('ALTER TABLE matches ADD COLUMN mvp_player_id INTEGER').run();
+  } catch (e) {
+    // Column already exists
+  }
+
   seedInitialData();
 }
 

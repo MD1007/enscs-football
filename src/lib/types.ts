@@ -6,6 +6,13 @@ export type MatchStage = 'group' | 'semi_final' | 'third_place' | 'final';
 
 export type EventType = 'goal' | 'assist' | 'yellow_card' | 'red_card';
 
+export interface PlayerBadge {
+  title: string;
+  subtitle: string;
+  color: 'amber' | 'emerald' | 'purple' | 'red' | 'blue';
+  icon?: string;
+}
+
 export interface Player {
   id: number;
   name: string;
@@ -20,6 +27,8 @@ export interface Player {
   assists?: number;
   yellow_cards?: number;
   red_cards?: number;
+  mvps?: number;
+  nicknames?: PlayerBadge[];
 }
 
 export interface Team {
@@ -68,6 +77,9 @@ export interface Match {
   venue?: string | null;
   notes?: string | null;
   winner_team_id?: number | null;
+  mvp_player_id?: number | null;
+  mvp_player_name?: string | null;
+  mvp_team_name?: string | null;
   events?: MatchEvent[];
 }
 
@@ -134,6 +146,7 @@ export interface TournamentData {
   best_second: StandingRow[];
   top_scorers: { player: Player; goals: number; rank: number }[];
   top_assists: { player: Player; assists: number; rank: number }[];
+  top_mvps: { player: Player; mvps: number; rank: number }[];
   yellow_cards: { player: Player; count: number; rank: number }[];
   red_cards: { player: Player; count: number; rank: number }[];
   summary: {

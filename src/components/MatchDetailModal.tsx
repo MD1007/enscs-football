@@ -143,6 +143,30 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
               <span>{match.venue || 'Terrain ENSCS'}</span>
             </div>
           </div>
+
+          {/* Official MVP Highlight */}
+          {match.mvp_player_name && (
+            <div className="mt-4 p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/30 flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center text-base">
+                  ⭐
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
+                    Man of the Match (MVP)
+                  </span>
+                  <span className="text-sm font-black text-white" dir="auto">
+                    {match.mvp_player_name}
+                  </span>
+                </div>
+              </div>
+              {match.mvp_team_name && (
+                <span className="text-xs font-semibold text-slate-300 px-2.5 py-1 rounded-lg bg-pitch-darkest border border-white/10" dir="auto">
+                  {match.mvp_team_name}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Match Events Body */}
