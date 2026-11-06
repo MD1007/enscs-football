@@ -11,3 +11,4 @@ services:
         value: production
       - key: JWT_SECRET
         value: mahdidhmn-enscs-secret-key-2026-production
+
