@@ -76,8 +76,6 @@ export default function Footer() {
               <Heart className="w-3 h-3 text-red-500 fill-red-500" />
               <span>for ENSCS Cybersecurity Students</span>
             </span>
-            <span>•</span>
-            <Link href="/admin" className="text-slate-400 hover:text-white transition">Admin Login</Link>
           </div>
         </div>
       </div>

@@ -6,7 +6,7 @@ import { Lock, Shield, User, ArrowRight, AlertCircle, CheckCircle } from 'lucide
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('MAHDIDHMN');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -73,7 +73,7 @@ export default function AdminLoginPage() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="Enter administrator username..."
                   className="w-full bg-pitch-darkest border border-pitch-border rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition font-mono"
                 />
               </div>
@@ -107,17 +107,6 @@ export default function AdminLoginPage() {
               </button>
             </div>
           </form>
-
-          {/* Seed credentials notice */}
-          <div className="p-3.5 rounded-xl bg-pitch-darkest/60 border border-white/5 text-xs text-slate-400 space-y-1">
-            <div className="flex items-center space-x-1.5 font-bold text-slate-300">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Official Administrator:</span>
-            </div>
-            <p className="font-mono text-[11px] text-slate-400">
-              Username: <span className="text-emerald-400">MAHDIDHMN</span>
-            </p>
-          </div>
         </div>
       </div>
     </div>
