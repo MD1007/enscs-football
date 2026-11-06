@@ -49,9 +49,9 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 overflow-y-auto p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn flex min-h-full items-start sm:items-center justify-center">
       <div
-        className="relative w-full max-w-2xl bg-pitch-darkest border border-pitch-border rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-2xl bg-pitch-darkest border border-pitch-border rounded-2xl shadow-2xl overflow-hidden my-4 sm:my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header Banner */}

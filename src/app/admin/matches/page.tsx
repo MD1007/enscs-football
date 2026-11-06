@@ -425,26 +425,27 @@ function AdminMatchesContent() {
 
       {/* MATCH EDITOR MODAL */}
       {editingMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-2 sm:p-6 flex min-h-full items-start justify-center">
           <div
-            className="w-full max-w-3xl bg-pitch-darkest border border-pitch-border rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl my-8"
+            className="w-full max-w-3xl bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-4 sm:p-8 space-y-5 shadow-2xl my-4 sm:my-8"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            {/* Sticky Modal Header */}
+            <div className="sticky top-0 z-20 bg-pitch-darkest/95 backdrop-blur-lg -mx-4 -mt-4 px-4 py-3 sm:-mx-8 sm:-mt-8 sm:px-8 sm:py-4 border-b border-white/10 flex items-center justify-between rounded-t-2xl sm:rounded-t-3xl shadow-sm">
               <div>
-                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                <span className="text-[10px] sm:text-xs font-bold text-emerald-400 uppercase tracking-wider">
                   {editingMatch.stage === 'group'
                     ? `Group ${editingMatch.group_id} • Matchday ${editingMatch.matchday}`
                     : editingMatch.stage.toUpperCase()}
                 </span>
-                <h3 className="text-xl font-black text-white" dir="auto">
+                <h3 className="text-base sm:text-xl font-black text-white truncate max-w-[220px] sm:max-w-md" dir="auto">
                   {editingMatch.home_team_name || 'TBD'} vs {editingMatch.away_team_name || 'TBD'}
                 </h3>
               </div>
               <button
                 onClick={() => setEditingMatch(null)}
-                className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-white/5"
+                className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition flex-shrink-0"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -756,8 +757,8 @@ function AdminMatchesContent() {
               </select>
             </div>
 
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-white/10">
+            {/* Sticky Modal Actions */}
+            <div className="sticky bottom-0 z-20 bg-pitch-darkest/95 backdrop-blur-lg -mx-4 -mb-4 px-4 py-3 sm:-mx-8 sm:-mb-8 sm:px-8 sm:py-4 border-t border-white/10 flex items-center justify-end space-x-3 rounded-b-2xl sm:rounded-b-3xl">
               <button
                 type="button"
                 onClick={() => setEditingMatch(null)}
@@ -769,10 +770,10 @@ function AdminMatchesContent() {
                 type="button"
                 disabled={saving}
                 onClick={handleSaveResult}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2"
+                className="px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2 disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
-                <span>{saving ? 'Saving...' : 'Save & Calculate Standings'}</span>
+                <span>{saving ? 'Saving...' : 'Save & Publish Result'}</span>
               </button>
             </div>
           </div>
@@ -781,9 +782,9 @@ function AdminMatchesContent() {
 
       {/* SCHEDULE MODAL */}
       {schedulingMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-6 flex min-h-full items-start justify-center">
           <div
-            className="w-full max-w-md bg-pitch-darkest border border-pitch-border rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl"
+            className="w-full max-w-md bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-5 shadow-2xl my-6 sm:my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-4">

@@ -167,8 +167,8 @@ export default function AdminRulesPage() {
 
       {/* Edit Rule Modal */}
       {editingRule && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-xl bg-pitch-darkest border border-pitch-border rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-6 flex min-h-full items-start justify-center">
+          <div className="w-full max-w-xl bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-5 shadow-2xl my-6 sm:my-auto">
             <h3 className="text-lg font-bold text-white">Edit Rule: {editingRule.title}</h3>
 
             <form onSubmit={handleSaveRule} className="space-y-4">
