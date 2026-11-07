@@ -110,11 +110,10 @@ export default function MatchesPage() {
               <button
                 key={tab.id}
                 onClick={() => setSelectedGroup(tab.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition ${
-                  selectedGroup === tab.id
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wide transition ${selectedGroup === tab.id
                     ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
                     : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300 border border-white/5'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
@@ -142,11 +141,10 @@ export default function MatchesPage() {
               <button
                 key={d}
                 onClick={() => setSelectedMatchday(d)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                  selectedMatchday === d
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${selectedMatchday === d
                     ? 'bg-white/15 text-white font-bold'
                     : 'text-slate-400 hover:text-white'
-                }`}
+                  }`}
               >
                 {d === 'all' ? 'All Days' : `Journée ${d}`}
               </button>
@@ -166,11 +164,10 @@ export default function MatchesPage() {
               <button
                 key={s.id}
                 onClick={() => setSelectedStatus(s.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-                  selectedStatus === s.id
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${selectedStatus === s.id
                     ? 'bg-white/15 text-white font-bold'
                     : 'text-slate-400 hover:text-white'
-                }`}
+                  }`}
               >
                 {s.label}
               </button>

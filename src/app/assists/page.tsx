@@ -93,7 +93,9 @@ export default function AssistsPage() {
                   <th className="py-3 px-4 text-center w-16">Rank</th>
                   <th className="py-3 px-4">Player</th>
                   <th className="py-3 px-4">Team</th>
-                  <th className="py-3 px-4 text-center font-black text-white">Assists 👟</th>
+                  <th className="py-3 px-4 text-center">Apps</th>
+                  <th className="py-3 px-4 text-center">A/M</th>
+                  <th className="py-3 px-4 text-center font-black text-white">Assists 🎯</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -143,6 +145,12 @@ export default function AssistsPage() {
                       </td>
                       <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
                         {item.player.team_name}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-400">
+                        {item.appearances}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-300 font-semibold">
+                        {item.assists_per_match.toFixed(2)}
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono font-black text-base text-blue-400">
                         {item.assists}

@@ -2,7 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { Team, Player, GroupId } from '@/lib/types';
-import { Users, Plus, Edit2, Trash2, Shield, Save, X, CheckCircle, AlertCircle } from 'lucide-react';
+import {
+  Users,
+  Plus,
+  Edit2,
+  Trash2,
+  Shield,
+  Save,
+  X,
+  CheckCircle,
+  AlertCircle,
+  Award,
+} from 'lucide-react';
 
 export default function AdminTeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -19,6 +30,8 @@ export default function AdminTeamsPage() {
   const [groupId, setGroupId] = useState<GroupId>('A');
   const [color, setColor] = useState('#10B981');
   const [captainId, setCaptainId] = useState<string>('');
+  const [goalkeeperId, setGoalkeeperId] = useState<string>('');
+  const [playerPositions, setPlayerPositions] = useState<Record<number, string>>({});
 
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -44,6 +57,8 @@ export default function AdminTeamsPage() {
     setGroupId('A');
     setColor('#10B981');
     setCaptainId('');
+    setGoalkeeperId('');
+    setPlayerPositions({});
     setModalOpen(true);
     setFeedback(null);
   };
@@ -55,8 +70,47 @@ export default function AdminTeamsPage() {
     setGroupId(t.group_id);
     setColor(t.color || '#3B82F6');
     setCaptainId(t.captain_id ? t.captain_id.toString() : '');
+    setGoalkeeperId(t.goalkeeper_id ? t.goalkeeper_id.toString() : '');
+
+    const teamMembers = players.filter((p) => p.team_id === t.id);
+    const posMap: Record<number, string> = {};
+    for (const p of teamMembers) {
+      posMap[p.id] = p.position || (p.id === t.goalkeeper_id ? 'Goalkeeper' : 'Attacker');
+    }
+    setPlayerPositions(posMap);
     setModalOpen(true);
     setFeedback(null);
+  };
+
+  const handleGoalkeeperChange = (newGkId: string) => {
+    setGoalkeeperId(newGkId);
+    if (newGkId) {
+      const numericGkId = parseInt(newGkId);
+      setPlayerPositions((prev) => {
+        const next = { ...prev };
+        // Reset previous GK to Defender if needed
+        for (const pid of Object.keys(next)) {
+          const numId = Number(pid);
+          if (numId !== numericGkId && next[numId] === 'Goalkeeper') {
+            next[numId] = 'Defender';
+          }
+        }
+        next[numericGkId] = 'Goalkeeper';
+        return next;
+      });
+    }
+  };
+
+  const handlePositionChange = (playerId: number, pos: string) => {
+    setPlayerPositions((prev) => ({
+      ...prev,
+      [playerId]: pos,
+    }));
+    if (pos === 'Goalkeeper') {
+      setGoalkeeperId(playerId.toString());
+    } else if (goalkeeperId === playerId.toString()) {
+      setGoalkeeperId('');
+    }
   };
 
   const handleSaveTeam = async (e: React.FormEvent) => {
@@ -68,7 +122,8 @@ export default function AdminTeamsPage() {
       const isEdit = Boolean(editingTeam);
       const url = '/api/admin/teams';
       const method = isEdit ? 'PUT' : 'POST';
-      const payload = {
+
+      const payload: any = {
         id: editingTeam?.id,
         name,
         name_ar: nameAr || null,
@@ -76,6 +131,15 @@ export default function AdminTeamsPage() {
         color,
         captain_id: captainId ? parseInt(captainId) : null,
       };
+
+      if (isEdit) {
+        payload.goalkeeper_id = goalkeeperId ? parseInt(goalkeeperId) : null;
+        payload.player_positions = Object.entries(playerPositions).map(([pid, pos]) => ({
+          id: parseInt(pid),
+          position: pos,
+          is_goalkeeper: pos === 'Goalkeeper',
+        }));
+      }
 
       const res = await fetch(url, {
         method,
@@ -88,7 +152,7 @@ export default function AdminTeamsPage() {
 
       setFeedback({ type: 'success', message: `Team successfully ${isEdit ? 'updated' : 'created'}!` });
       fetchData();
-      setTimeout(() => setModalOpen(false), 1000);
+      setTimeout(() => setModalOpen(false), 900);
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Operation failed' });
     } finally {
@@ -120,10 +184,10 @@ export default function AdminTeamsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Rosters & Clubs</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Rosters & Positions</span>
           <h1 className="text-3xl font-black text-white uppercase tracking-tight">Team Management</h1>
           <p className="text-sm text-slate-400">
-            Create, edit team details, assign colors, designate team captains, or remove teams.
+            Create and edit clubs, designate official goalkeepers, configure team captains, and assign player pitch positions.
           </p>
         </div>
 
@@ -149,7 +213,7 @@ export default function AdminTeamsPage() {
                   Group {t.group_id}
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
-                  {t.players?.length || 0} Players
+                  {t.players?.length || 0} / 7 Players
                 </span>
               </div>
 
@@ -172,11 +236,31 @@ export default function AdminTeamsPage() {
                 </div>
               </div>
 
-              <div className="text-xs text-slate-300 py-1 border-t border-white/5 flex items-center justify-between">
-                <span className="text-slate-500">Captain:</span>
-                <span className="font-semibold text-white truncate max-w-[150px]" dir="auto">
-                  {t.captain_name || 'None'}
-                </span>
+              {/* Roster Badges: Captain & Designated Goalkeeper */}
+              <div className="space-y-1.5 py-2 border-t border-white/5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 flex items-center space-x-1">
+                    <span>👑 Captain:</span>
+                  </span>
+                  <span className="font-semibold text-white truncate max-w-[150px]" dir="auto">
+                    {t.captain_name || <span className="text-slate-500 italic">Unassigned</span>}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-blue-400 flex items-center space-x-1">
+                    <span>🧤 Goalkeeper:</span>
+                  </span>
+                  <span className="font-semibold text-blue-200 truncate max-w-[150px]" dir="auto">
+                    {t.goalkeeper_name ? (
+                      <span className="bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                        {t.goalkeeper_name}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500 italic">Not Designated</span>
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -186,7 +270,7 @@ export default function AdminTeamsPage() {
                 className="flex-1 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition flex items-center justify-center space-x-1"
               >
                 <Edit2 className="w-3.5 h-3.5" />
-                <span>Edit Team</span>
+                <span>Manage Team & GK</span>
               </button>
               <button
                 onClick={() => handleDeleteTeam(t.id, t.name)}
@@ -204,13 +288,18 @@ export default function AdminTeamsPage() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-6 flex min-h-full items-start justify-center">
           <div
-            className="w-full max-w-lg bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-5 shadow-2xl my-6 sm:my-auto"
+            className="w-full max-w-xl bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-6 shadow-2xl my-6 sm:my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <h3 className="text-xl font-bold text-white">
-                {editingTeam ? `Edit Team: ${editingTeam.name}` : 'Create New Team'}
-              </h3>
+              <div>
+                <h3 className="text-xl font-bold text-white">
+                  {editingTeam ? `Manage Club: ${editingTeam.name}` : 'Create New Team'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {editingTeam ? 'Configure details, designate goalkeeper, and assign player positions.' : 'Enter new club specifications.'}
+                </p>
+              </div>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
@@ -225,39 +314,41 @@ export default function AdminTeamsPage() {
                 }`}
               >
                 {feedback.type === 'success' ? (
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 ) : (
-                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
                 )}
                 <span>{feedback.message}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveTeam} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Team Name (Standard)</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. OSPF or Spider-Feet"
-                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
-                />
-              </div>
+            <form onSubmit={handleSaveTeam} className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Team Name (Standard)</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. OSPF or Spider-Feet"
+                    className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
-                  Team Name (Arabic - Optional)
-                </label>
-                <input
-                  type="text"
-                  value={nameAr}
-                  onChange={(e) => setNameAr(e.target.value)}
-                  placeholder="e.g. فريق الرجال or زورو"
-                  dir="rtl"
-                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-ar text-right"
-                />
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                    Team Name (Arabic - Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={nameAr}
+                    onChange={(e) => setNameAr(e.target.value)}
+                    placeholder="e.g. فريق الرجال or زورو"
+                    dir="rtl"
+                    className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-ar text-right"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -296,7 +387,7 @@ export default function AdminTeamsPage() {
               {editingTeam && (
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
-                    Designate Team Captain
+                    👑 Designate Team Captain
                   </label>
                   <select
                     value={captainId}
@@ -306,10 +397,114 @@ export default function AdminTeamsPage() {
                     <option value="">No designated captain</option>
                     {teamPlayers.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name}
+                        {p.name} {p.squad_number ? `(#${p.squad_number})` : ''}
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* SECTION: DESIGNATE GOALKEEPER */}
+              {editingTeam && (
+                <div className="p-4 rounded-2xl bg-blue-950/30 border border-blue-500/30 space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xl">🧤</span>
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-blue-300">
+                        DESIGNATE GOALKEEPER
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Select which player is this team's designated goalkeeper. Clean sheets and goalkeeper rankings are calculated from this assignment.
+                      </p>
+                    </div>
+                  </div>
+
+                  <select
+                    value={goalkeeperId}
+                    onChange={(e) => handleGoalkeeperChange(e.target.value)}
+                    className="w-full bg-pitch-darkest border border-blue-500/40 rounded-xl p-2.5 text-xs text-blue-200 focus:outline-none focus:border-blue-400 font-bold"
+                  >
+                    <option value="">No designated goalkeeper</option>
+                    {teamPlayers.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        🧤 {p.name} {p.squad_number ? `(#${p.squad_number})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* SECTION: PLAYER POSITIONS & ROSTER */}
+              {editingTeam && (
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                        Squad Roster & Positions ({teamPlayers.length} / 7)
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        Assign pitch roles: Goalkeeper (GK), Defender, Midfielder, or Attacker.
+                      </p>
+                    </div>
+                  </div>
+
+                  {teamPlayers.length === 0 ? (
+                    <p className="text-xs text-slate-500 italic p-3 bg-white/5 rounded-xl">
+                      No players registered yet for this team.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {teamPlayers.map((p) => {
+                        const currentPos = playerPositions[p.id] || p.position || 'Attacker';
+                        const isGK = currentPos === 'Goalkeeper' || goalkeeperId === p.id.toString();
+
+                        return (
+                          <div
+                            key={p.id}
+                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                              isGK
+                                ? 'bg-blue-950/25 border-blue-500/40'
+                                : 'bg-pitch-card border-pitch-border'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2 truncate">
+                              <span className="font-mono text-slate-400 text-[10px] w-5 text-center">
+                                {p.squad_number ? `#${p.squad_number}` : '-'}
+                              </span>
+                              <span className="font-semibold text-white truncate" dir="auto">
+                                {p.name}
+                              </span>
+                              {p.id.toString() === captainId && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                  CAP
+                                </span>
+                              )}
+                              {isGK && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                  GK
+                                </span>
+                              )}
+                            </div>
+
+                            <select
+                              value={currentPos}
+                              onChange={(e) => handlePositionChange(p.id, e.target.value)}
+                              className={`rounded-lg px-2 py-1 text-xs font-bold border focus:outline-none ${
+                                isGK
+                                  ? 'bg-blue-900/60 border-blue-500 text-blue-200'
+                                  : 'bg-pitch-darkest border-pitch-border text-slate-300'
+                              }`}
+                            >
+                              <option value="Goalkeeper">Goalkeeper (GK)</option>
+                              <option value="Defender">Defender</option>
+                              <option value="Midfielder">Midfielder</option>
+                              <option value="Attacker">Attacker</option>
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -336,4 +531,3 @@ export default function AdminTeamsPage() {
     </div>
   );
 }
-

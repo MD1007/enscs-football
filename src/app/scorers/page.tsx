@@ -93,6 +93,8 @@ export default function ScorersPage() {
                   <th className="py-3 px-4 text-center w-16">Rank</th>
                   <th className="py-3 px-4">Player</th>
                   <th className="py-3 px-4">Team</th>
+                  <th className="py-3 px-4 text-center">Apps</th>
+                  <th className="py-3 px-4 text-center">G/M</th>
                   <th className="py-3 px-4 text-center font-black text-white">Goals ⚽</th>
                 </tr>
               </thead>
@@ -143,6 +145,12 @@ export default function ScorersPage() {
                       </td>
                       <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
                         {item.player.team_name}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-400">
+                        {item.appearances}
+                      </td>
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-300 font-semibold">
+                        {item.goals_per_match.toFixed(2)}
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono font-black text-base text-amber-400">
                         {item.goals}

@@ -19,19 +19,32 @@ export const dynamic = 'force-dynamic';
 
 export default function AwardsPublicPage() {
   const data = getFullTournamentData({ isAdmin: false });
-  const { awards, top_scorers, top_assists, top_mvps } = data;
+  const { awards, top_scorers, top_assists, top_mvps, best_goalkeepers, clean_sheets_leaderboard } = data;
 
   const potRevealed = Boolean(awards?.pot_revealed);
   const tottRevealed = Boolean(awards?.tott_revealed);
-  const anyRevealed = potRevealed || tottRevealed;
+  const goldenBootRevealed = Boolean(awards?.golden_boot_revealed);
+  const bestPlaymakerRevealed = Boolean(awards?.best_playmaker_revealed);
+  const bestGkRevealed = Boolean(awards?.best_gk_revealed);
+  const mostCleanSheetsRevealed = Boolean(awards?.most_clean_sheets_revealed);
+  const mostMvpsRevealed = Boolean(awards?.most_mvps_revealed);
+
+  const anyRevealed =
+    potRevealed ||
+    tottRevealed ||
+    goldenBootRevealed ||
+    bestPlaymakerRevealed ||
+    bestGkRevealed ||
+    mostCleanSheetsRevealed ||
+    mostMvpsRevealed;
 
   const potWinner = awards?.pot_winner;
   const tottData = awards?.tott_data;
-
-  // Category leaders
-  const topScorer = top_scorers.length > 0 ? top_scorers[0] : null;
-  const topAssister = top_assists.length > 0 ? top_assists[0] : null;
-  const topMVP = top_mvps.length > 0 ? top_mvps[0] : null;
+  const goldenBootWinner = awards?.golden_boot_winner;
+  const bestPlaymakerWinner = awards?.best_playmaker_winner;
+  const bestGkWinner = awards?.best_gk_winner;
+  const mostCleanSheetsWinner = awards?.most_clean_sheets_winner;
+  const mostMvpsWinner = awards?.most_mvps_winner;
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-12">
@@ -49,7 +62,7 @@ export default function AwardsPublicPage() {
         </p>
       </div>
 
-      {/* LOCKED CEREMONY STATE: When awards have not been revealed yet */}
+      {/* LOCKED CEREMONY STATE: When NO awards have been revealed yet */}
       {!anyRevealed && (
         <div className="glass-panel rounded-3xl p-8 sm:p-16 border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-pitch-card to-pitch-darkest text-center space-y-6 shadow-2xl relative overflow-hidden">
           <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-3xl bg-gradient-to-br from-amber-400/20 to-amber-600/10 border border-amber-400/40 flex items-center justify-center text-4xl sm:text-5xl shadow-glow">
@@ -65,7 +78,7 @@ export default function AwardsPublicPage() {
             </h2>
             <p className="text-sm text-slate-400 leading-relaxed">
               Following the conclusion of the Grand Final, the tournament committee will officially announce the
-              <strong> Player of the Tournament (Golden Ball)</strong>, the <strong>Team of the Tournament (Best 7)</strong>, and all tournament accolades.
+              <strong> Player of the Tournament (Golden Ball)</strong>, the <strong>Team of the Tournament (Best 7)</strong>, the <strong>Golden Glove</strong>, and all tournament accolades.
             </p>
           </div>
 
@@ -79,14 +92,14 @@ export default function AwardsPublicPage() {
 
             <div className="p-4 rounded-2xl bg-pitch-darkest/70 border border-white/5 space-y-2">
               <Users className="w-6 h-6 text-emerald-400/50 mx-auto" />
-              <span className="text-xs font-bold text-slate-300 uppercase block">Team of Tournament (Best 7)</span>
+              <span className="text-xs font-bold text-slate-300 uppercase block">Team of Tournament</span>
               <span className="text-[10px] text-emerald-400 font-mono">🔒 5 Starters + 2 Subs</span>
             </div>
 
             <div className="p-4 rounded-2xl bg-pitch-darkest/70 border border-white/5 space-y-2">
-              <Flame className="w-6 h-6 text-red-400/50 mx-auto" />
-              <span className="text-xs font-bold text-slate-300 uppercase block">Category Accolades</span>
-              <span className="text-[10px] text-red-400 font-mono">🔒 Top Scorer & Assister</span>
+              <Shield className="w-6 h-6 text-blue-400/50 mx-auto" />
+              <span className="text-xs font-bold text-slate-300 uppercase block">Golden Glove</span>
+              <span className="text-[10px] text-blue-400 font-mono">🔒 Best Goalkeeper</span>
             </div>
           </div>
         </div>
@@ -302,89 +315,171 @@ export default function AwardsPublicPage() {
         </div>
       )}
 
-      {/* REVEALED 3: INDIVIDUAL CATEGORY HONORS */}
+      {/* REVEALED 3: INDIVIDUAL TROPHY ACCOLADES */}
       {anyRevealed && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center space-x-2">
             <Medal className="w-5 h-5 text-amber-400" />
-            <h2 className="text-xl font-black text-white uppercase tracking-tight">Individual Accolades</h2>
+            <h2 className="text-xl font-black text-white uppercase tracking-tight">Individual Tournament Trophies</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Top Scorer */}
-            {topScorer && (
-              <div className="glass-panel rounded-2xl p-5 border border-amber-500/30 bg-pitch-card/80 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {/* 1. Golden Boot */}
+            {goldenBootRevealed && goldenBootWinner && (
+              <div className="glass-panel rounded-2xl p-6 border border-amber-500/40 bg-gradient-to-br from-amber-950/30 to-pitch-card space-y-4 shadow-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase text-amber-400 bg-amber-400/15 px-2.5 py-0.5 rounded-full border border-amber-400/30">
-                    ⚡ El Cyber Goleador
+                    👟 Golden Boot Winner
                   </span>
-                  <Flame className="w-4 h-4 text-amber-400" />
+                  <Flame className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
                   <Link
-                    href={`/players/${topScorer.player.id}`}
-                    className="text-lg font-black text-white hover:text-amber-400 transition truncate block"
+                    href={`/players/${goldenBootWinner.id}`}
+                    className="text-xl font-black text-white hover:text-amber-400 transition truncate block"
                     dir="auto"
                   >
-                    {topScorer.player.name}
+                    {goldenBootWinner.name}
                   </Link>
-                  <span className="text-xs text-slate-400" dir="auto">{topScorer.player.team_name}</span>
+                  <span className="text-xs text-slate-400" dir="auto">{goldenBootWinner.team_name}</span>
                 </div>
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between font-mono">
-                  <span className="text-xs text-slate-400">Total Goals</span>
-                  <span className="text-xl font-black text-amber-400">{topScorer.goals} ⚽</span>
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Goals</span>
+                    <span className="text-2xl font-black text-amber-400">{goldenBootWinner.goals} ⚽</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase block">Ratio</span>
+                    <span className="text-xs text-slate-300 font-bold">{goldenBootWinner.goals_per_match} G/M</span>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Top Assister */}
-            {topAssister && (
-              <div className="glass-panel rounded-2xl p-5 border border-blue-500/30 bg-pitch-card/80 space-y-3">
+            {/* 2. Best Playmaker */}
+            {bestPlaymakerRevealed && bestPlaymakerWinner && (
+              <div className="glass-panel rounded-2xl p-6 border border-blue-500/40 bg-gradient-to-br from-blue-950/30 to-pitch-card space-y-4 shadow-xl">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase text-blue-400 bg-blue-400/15 px-2.5 py-0.5 rounded-full border border-blue-400/30">
-                    🪄 The Master Architect
+                    🎯 Best Playmaker Award
                   </span>
-                  <Sparkles className="w-4 h-4 text-blue-400" />
+                  <Sparkles className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
                   <Link
-                    href={`/players/${topAssister.player.id}`}
-                    className="text-lg font-black text-white hover:text-blue-400 transition truncate block"
+                    href={`/players/${bestPlaymakerWinner.id}`}
+                    className="text-xl font-black text-white hover:text-blue-400 transition truncate block"
                     dir="auto"
                   >
-                    {topAssister.player.name}
+                    {bestPlaymakerWinner.name}
                   </Link>
-                  <span className="text-xs text-slate-400" dir="auto">{topAssister.player.team_name}</span>
+                  <span className="text-xs text-slate-400" dir="auto">{bestPlaymakerWinner.team_name}</span>
                 </div>
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between font-mono">
-                  <span className="text-xs text-slate-400">Total Assists</span>
-                  <span className="text-xl font-black text-blue-400">{topAssister.assists} 👟</span>
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Assists</span>
+                    <span className="text-2xl font-black text-blue-400">{bestPlaymakerWinner.assists} 🎯</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase block">Ratio</span>
+                    <span className="text-xs text-slate-300 font-bold">{bestPlaymakerWinner.assists_per_match} A/M</span>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Most MVPs */}
-            {topMVP && (
-              <div className="glass-panel rounded-2xl p-5 border border-purple-500/30 bg-pitch-card/80 space-y-3">
+            {/* 3. Best Goalkeeper (Golden Glove) */}
+            {bestGkRevealed && bestGkWinner && (
+              <div className="glass-panel rounded-2xl p-6 border border-cyan-500/40 bg-gradient-to-br from-cyan-950/30 to-pitch-card space-y-4 shadow-xl">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30">
-                    👑 Tournament Kingpin
+                  <span className="text-[10px] font-black uppercase text-cyan-400 bg-cyan-400/15 px-2.5 py-0.5 rounded-full border border-cyan-400/30">
+                    🧤 Golden Glove Winner
                   </span>
-                  <Crown className="w-4 h-4 text-purple-400" />
+                  <Shield className="w-5 h-5 text-cyan-400" />
                 </div>
                 <div>
                   <Link
-                    href={`/players/${topMVP.player.id}`}
-                    className="text-lg font-black text-white hover:text-purple-300 transition truncate block"
+                    href={`/players/${bestGkWinner.id}`}
+                    className="text-xl font-black text-white hover:text-cyan-400 transition truncate block"
                     dir="auto"
                   >
-                    {topMVP.player.name}
+                    {bestGkWinner.name}
                   </Link>
-                  <span className="text-xs text-slate-400" dir="auto">{topMVP.player.team_name}</span>
+                  <span className="text-xs text-slate-400" dir="auto">{bestGkWinner.team_name}</span>
                 </div>
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between font-mono">
-                  <span className="text-xs text-slate-400">Match MVP Awards</span>
-                  <span className="text-xl font-black text-amber-400">{topMVP.mvps} ⭐</span>
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Clean Sheets</span>
+                    <span className="text-2xl font-black text-cyan-400">{bestGkWinner.clean_sheets || 0} 🧱</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase block">CS %</span>
+                    <span className="text-xs text-slate-300 font-bold">{bestGkWinner.clean_sheet_percentage}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Most Clean Sheets */}
+            {mostCleanSheetsRevealed && mostCleanSheetsWinner && (
+              <div className="glass-panel rounded-2xl p-6 border border-emerald-500/40 bg-gradient-to-br from-emerald-950/30 to-pitch-card space-y-4 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-400/15 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
+                    🧱 Defensive Wall Award
+                  </span>
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <Link
+                    href={`/players/${mostCleanSheetsWinner.id}`}
+                    className="text-xl font-black text-white hover:text-emerald-400 transition truncate block"
+                    dir="auto"
+                  >
+                    {mostCleanSheetsWinner.name}
+                  </Link>
+                  <span className="text-xs text-slate-400" dir="auto">{mostCleanSheetsWinner.team_name}</span>
+                </div>
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Total Clean Sheets</span>
+                    <span className="text-2xl font-black text-emerald-400">{mostCleanSheetsWinner.clean_sheets || 0}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase block">GK Matches</span>
+                    <span className="text-xs text-slate-300 font-bold">{mostCleanSheetsWinner.matches_as_gk || mostCleanSheetsWinner.matches_played || 0}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5. Most MVPs */}
+            {mostMvpsRevealed && mostMvpsWinner && (
+              <div className="glass-panel rounded-2xl p-6 border border-purple-500/40 bg-gradient-to-br from-purple-950/30 to-pitch-card space-y-4 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-purple-300 bg-purple-500/15 px-2.5 py-0.5 rounded-full border border-purple-500/30">
+                    ⭐ Tournament Kingpin
+                  </span>
+                  <Crown className="w-5 h-5 text-purple-400" />
+                </div>
+                <div>
+                  <Link
+                    href={`/players/${mostMvpsWinner.id}`}
+                    className="text-xl font-black text-white hover:text-purple-300 transition truncate block"
+                    dir="auto"
+                  >
+                    {mostMvpsWinner.name}
+                  </Link>
+                  <span className="text-xs text-slate-400" dir="auto">{mostMvpsWinner.team_name}</span>
+                </div>
+                <div className="pt-3 border-t border-white/5 flex items-center justify-between font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-500 uppercase block">Match MVPs</span>
+                    <span className="text-2xl font-black text-purple-400">{mostMvpsWinner.mvps} ⭐</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase block">Matches</span>
+                    <span className="text-xs text-slate-300 font-bold">{mostMvpsWinner.matches_played || 0}</span>
+                  </div>
                 </div>
               </div>
             )}

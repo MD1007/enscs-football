@@ -22,6 +22,7 @@ export default function AdminPlayersPage() {
   const [nameAr, setNameAr] = useState('');
   const [teamId, setTeamId] = useState<number>(0);
   const [isCaptain, setIsCaptain] = useState(false);
+  const [position, setPosition] = useState<string>('Attacker');
   const [squadNumber, setSquadNumber] = useState('');
 
   const [saving, setSaving] = useState(false);
@@ -47,6 +48,7 @@ export default function AdminPlayersPage() {
     setNameAr('');
     setTeamId(defaultTeamId || (teams.length > 0 ? teams[0].id : 0));
     setIsCaptain(false);
+    setPosition('Attacker');
     setSquadNumber('');
     setModalOpen(true);
     setFeedback(null);
@@ -58,6 +60,7 @@ export default function AdminPlayersPage() {
     setNameAr(p.name_ar || '');
     setTeamId(p.team_id);
     setIsCaptain(Boolean(p.is_captain));
+    setPosition(p.position || (p.is_goalkeeper ? 'Goalkeeper' : 'Attacker'));
     setSquadNumber(p.squad_number ? p.squad_number.toString() : '');
     setModalOpen(true);
     setFeedback(null);
@@ -78,6 +81,8 @@ export default function AdminPlayersPage() {
         name_ar: nameAr || null,
         team_id: teamId,
         is_captain: isCaptain,
+        position,
+        is_goalkeeper: position === 'Goalkeeper',
         squad_number: squadNumber ? parseInt(squadNumber) : null,
       };
 
@@ -219,52 +224,77 @@ export default function AdminPlayersPage() {
                 <th className="py-3 px-4 text-center w-12">#</th>
                 <th className="py-3 px-4">Player Name</th>
                 <th className="py-3 px-4">Team</th>
+                <th className="py-3 px-4 text-center">Position</th>
                 <th className="py-3 px-4 text-center">Captain?</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filteredPlayers.map((p, idx) => (
-                <tr key={p.id} className="transition hover:bg-white/[0.04]">
-                  <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
-                  <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
-                    <span>{p.name}</span>
-                    {p.name_ar && p.name_ar !== p.name && (
-                      <span className="text-xs text-slate-400 ml-2 font-ar" dir="rtl">
-                        ({p.name_ar})
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 text-xs text-slate-300 font-semibold" dir="auto">
-                    {p.team_name}
-                  </td>
-                  <td className="py-3.5 px-4 text-center">
-                    {p.is_captain ? (
-                      <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full font-black uppercase">
-                        Captain
-                      </span>
-                    ) : (
-                      <span className="text-slate-600 text-xs">-</span>
-                    )}
-                  </td>
-                  <td className="py-3.5 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => openEditModal(p)}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white transition"
-                      title="Edit player"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeletePlayer(p.id, p.name)}
-                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
-                      title="Delete player"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredPlayers.map((p, idx) => {
+                const pos = p.position || (p.is_goalkeeper ? 'Goalkeeper' : 'Attacker');
+                const isGK = pos === 'Goalkeeper' || Boolean(p.is_goalkeeper);
+
+                return (
+                  <tr key={p.id} className="transition hover:bg-white/[0.04]">
+                    <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
+                    <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
+                      <span>{p.name}</span>
+                      {p.name_ar && p.name_ar !== p.name && (
+                        <span className="text-xs text-slate-400 ml-2 font-ar" dir="rtl">
+                          ({p.name_ar})
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-xs text-slate-300 font-semibold" dir="auto">
+                      {p.team_name}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      {isGK ? (
+                        <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-2 py-0.5 rounded-full font-black uppercase">
+                          🧤 GK
+                        </span>
+                      ) : pos === 'Defender' ? (
+                        <span className="text-[10px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-full font-bold uppercase">
+                          DEF
+                        </span>
+                      ) : pos === 'Midfielder' ? (
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold uppercase">
+                          MID
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-bold uppercase">
+                          ATT
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      {p.is_captain ? (
+                        <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full font-black uppercase">
+                          Captain
+                        </span>
+                      ) : (
+                        <span className="text-slate-600 text-xs">-</span>
+                      )}
+                    </td>
+                    <td className="py-3.5 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => openEditModal(p)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white transition"
+                        title="Edit player"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeletePlayer(p.id, p.name)}
+                        className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
+                        title="Delete player"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -333,6 +363,22 @@ export default function AdminPlayersPage() {
                       {t.name} (Poule {t.group_id})
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
+                  Pitch Position
+                </label>
+                <select
+                  value={position}
+                  onChange={(e) => setPosition(e.target.value)}
+                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
+                >
+                  <option value="Goalkeeper">Goalkeeper (GK)</option>
+                  <option value="Defender">Defender</option>
+                  <option value="Midfielder">Midfielder</option>
+                  <option value="Attacker">Attacker</option>
                 </select>
               </div>
 

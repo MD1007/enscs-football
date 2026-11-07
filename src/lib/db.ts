@@ -117,6 +117,9 @@ export function initDatabase() {
     'ALTER TABLE matches ADD COLUMN fouls_away INTEGER',
     'ALTER TABLE match_events ADD COLUMN sub_type TEXT DEFAULT "normal"',
     'ALTER TABLE match_events ADD COLUMN assister_id INTEGER',
+    'ALTER TABLE teams ADD COLUMN goalkeeper_id INTEGER',
+    'ALTER TABLE players ADD COLUMN position TEXT DEFAULT "Attacker"',
+    'ALTER TABLE players ADD COLUMN is_goalkeeper INTEGER DEFAULT 0',
   ];
 
   for (const sql of migrations) {
@@ -126,6 +129,24 @@ export function initDatabase() {
       // Column already exists
     }
   }
+
+  // Create tournament_awards table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tournament_awards (
+      award_key TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      winner_player_id INTEGER,
+      selection_mode TEXT DEFAULT 'auto',
+      is_locked INTEGER DEFAULT 0,
+      is_revealed INTEGER DEFAULT 0,
+      revealed_at DATETIME,
+      status TEXT DEFAULT 'in_progress',
+      data_json TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (winner_player_id) REFERENCES players (id) ON DELETE SET NULL
+    );
+  `);
 
   seedInitialData();
 }
@@ -155,21 +176,28 @@ function seedInitialData() {
     insertSetting.run('mvp_weight_red_card', '-4');
   }
 
-  // Ensure default weights exist even on existing database
+  // Ensure default scoring weights exist
   const insertWeight = db.prepare('INSERT OR IGNORE INTO tournament_settings (key, value) VALUES (?, ?)');
-  insertWeight.run('mvp_weight_goal', '5');
+  insertWeight.run('mvp_weight_goal', '4');
   insertWeight.run('mvp_weight_assist', '3');
-  insertWeight.run('mvp_weight_clean_sheet', '4');
+  insertWeight.run('mvp_weight_motm', '3');
+  insertWeight.run('mvp_weight_gk_clean_sheet', '4');
+  insertWeight.run('mvp_weight_def_clean_sheet', '2');
   insertWeight.run('mvp_weight_yellow_card', '-1');
-  insertWeight.run('mvp_weight_red_card', '-4');
+  insertWeight.run('mvp_weight_red_card', '-3');
+  insertWeight.run('pot_min_appearances', '3');
 
-  // Awards settings defaults
-  insertWeight.run('awards_pot_revealed', 'false');
-  insertWeight.run('awards_tott_revealed', 'false');
-  insertWeight.run('awards_tott_data', '');
-  insertWeight.run('awards_pot_player_id', '');
-  insertWeight.run('awards_pot_mode', 'auto');
-  insertWeight.run('awards_pot_locked', 'false');
+  // Seed default 7 awards in tournament_awards table
+  const insertAward = db.prepare(`
+    INSERT OR IGNORE INTO tournament_awards (award_key, title, subtitle) VALUES (?, ?, ?)
+  `);
+  insertAward.run('pot', 'Player of the Tournament', 'Official Golden Ball Award 2026');
+  insertAward.run('tott', 'Team of the Tournament', 'Official Best 7 (5 Starters + 2 Substitutes)');
+  insertAward.run('golden_boot', 'Golden Boot', 'Tournament Top Goalscorer');
+  insertAward.run('best_playmaker', 'Best Playmaker', 'Tournament Assist Leader');
+  insertAward.run('best_gk', 'Best Goalkeeper', 'Golden Glove Award');
+  insertAward.run('most_clean_sheets', 'Most Clean Sheets', 'Defensive Wall of the Tournament');
+  insertAward.run('most_mvps', 'Most Man of the Match Awards', 'Tournament Kingpin Award');
 
   // Check if rules exist
   const rulesCount = db.prepare('SELECT count(*) as count FROM tournament_rules').get() as { count: number };

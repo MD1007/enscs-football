@@ -20,9 +20,19 @@ import {
   Zap,
   RefreshCw,
   Save,
-  UserCheck,
+  Sliders,
+  ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
-import { Player, Team, TeamOfTournamentData, TeamOfTournamentPlayer } from '@/lib/types';
+import {
+  Player,
+  Team,
+  TeamOfTournamentData,
+  TeamOfTournamentPlayer,
+  AwardItem,
+  AwardKey,
+  AwardStatus,
+} from '@/lib/types';
 import { getFormationSlots } from '@/lib/calculations';
 
 export default function AdminAwardsPage() {
@@ -30,20 +40,20 @@ export default function AdminAwardsPage() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Active section tab
-  const [activeTab, setActiveTab] = useState<'pot' | 'tott'>('pot');
+  // Active tab
+  const [activeTab, setActiveTab] = useState<'overview' | 'pot' | 'tott' | 'goalkeepers' | 'weights'>('overview');
 
   // Server state
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [awardsList, setAwardsList] = useState<AwardItem[]>([]);
   const [playerOfTheTournament, setPlayerOfTheTournament] = useState<any[]>([]);
+  const [bestGoalkeepers, setBestGoalkeepers] = useState<any[]>([]);
+  const [cleanSheetsLeaderboard, setCleanSheetsLeaderboard] = useState<any[]>([]);
+  const [topScorers, setTopScorers] = useState<any[]>([]);
+  const [topAssists, setTopAssists] = useState<any[]>([]);
+  const [topMVPs, setTopMVPs] = useState<any[]>([]);
   const [suggestions, setSuggestions] = useState<Record<string, TeamOfTournamentData>>({});
-
-  // Player of the Tournament admin state
-  const [potMode, setPotMode] = useState<'auto' | 'manual'>('auto');
-  const [potPlayerId, setPotPlayerId] = useState<number | null>(null);
-  const [potLocked, setPotLocked] = useState(false);
-  const [potRevealed, setPotRevealed] = useState(false);
 
   // Team of the Tournament admin state
   const [tottRevealed, setTottRevealed] = useState(false);
@@ -58,6 +68,18 @@ export default function AdminAwardsPage() {
     position_label: string;
   } | null>(null);
 
+  // Weights state
+  const [weights, setWeights] = useState({
+    goal: 4,
+    assist: 3,
+    motm: 3,
+    gk_clean_sheet: 4,
+    def_clean_sheet: 2,
+    yellow_card: -1,
+    red_card: -3,
+  });
+  const [minAppearances, setMinAppearances] = useState<number>(3);
+
   const fetchAwardsData = async () => {
     try {
       setLoading(true);
@@ -68,13 +90,22 @@ export default function AdminAwardsPage() {
       setPlayers(data.players || []);
       setTeams(data.teams || []);
       setPlayerOfTheTournament(data.player_of_tournament || []);
+      setBestGoalkeepers(data.best_goalkeepers || []);
+      setCleanSheetsLeaderboard(data.clean_sheets_leaderboard || []);
+      setTopScorers(data.top_scorers || []);
+      setTopAssists(data.top_assists || []);
+      setTopMVPs(data.top_mvps || []);
       setSuggestions(data.suggestions || {});
 
       const awards = data.awards || {};
-      setPotMode(awards.pot_mode || 'auto');
-      setPotLocked(Boolean(awards.pot_locked));
-      setPotRevealed(Boolean(awards.pot_revealed));
-      setPotPlayerId(awards.pot_winner ? awards.pot_winner.id : null);
+      setAwardsList(awards.awards_list || []);
+
+      if (awards.weights) {
+        setWeights(awards.weights);
+      }
+      if (awards.min_appearances !== undefined) {
+        setMinAppearances(awards.min_appearances);
+      }
 
       setTottRevealed(Boolean(awards.tott_revealed));
 
@@ -100,12 +131,110 @@ export default function AdminAwardsPage() {
     fetchAwardsData();
   }, []);
 
-  // When changing formation, rearrange starters according to new slots
+  // Update specific award
+  const handleUpdateAward = async (
+    awardKey: AwardKey,
+    params: {
+      winner_player_id?: number | null;
+      selection_mode?: 'auto' | 'manual';
+      is_locked?: boolean;
+      is_revealed?: boolean;
+      data_json?: any;
+    }
+  ) => {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/admin/awards', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_award',
+          award_key: awardKey,
+          ...params,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to update award');
+
+      setFeedback({ type: 'success', message: 'Award updated successfully!' });
+      fetchAwardsData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Failed to update award' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Master Action: Reveal / Hide All Awards Together
+  const handleRevealAll = async (reveal: boolean) => {
+    const confirmMsg = reveal
+      ? 'Are you sure you want to REVEAL ALL AWARDS simultaneously? Visitors to the public awards page will immediately see all official tournament winners.'
+      : 'Hide all awards from the public website?';
+
+    if (!confirm(confirmMsg)) return;
+
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/admin/awards', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reveal_all',
+          is_revealed: reveal,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to toggle awards');
+
+      setFeedback({
+        type: 'success',
+        message: reveal ? '🎉 All tournament awards revealed together!' : 'All awards have been hidden.',
+      });
+      fetchAwardsData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Failed to toggle awards' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save Scoring Weights & Min Apps
+  const handleSaveWeights = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/admin/awards', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_weights',
+          weights,
+          min_appearances: minAppearances,
+        }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || 'Failed to save weights');
+
+      setFeedback({ type: 'success', message: 'Scoring formula and eligibility updated!' });
+      fetchAwardsData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Failed to save weights' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // TOTT Formation Change
   const handleFormationChange = (newFormation: string) => {
     setFormation(newFormation);
     const newSlots = getFormationSlots(newFormation);
 
-    // Keep existing selected players if possible, mapped into new coordinates
     const updatedStarters: TeamOfTournamentPlayer[] = newSlots.map((slot, idx) => {
       const existing = starters[idx];
       return {
@@ -128,7 +257,7 @@ export default function AdminAwardsPage() {
     setStarters(updatedStarters);
   };
 
-  // Load recommended lineup from suggestions
+  // Load recommended TOTT lineup
   const handleLoadSuggestion = () => {
     const sugg = suggestions[formation] || suggestions['1-2-1'];
     if (!sugg) return;
@@ -137,18 +266,17 @@ export default function AdminAwardsPage() {
     setFeedback({ type: 'success', message: `Loaded top performers for formation ${formation}!` });
   };
 
-  // Assign player to slot
+  // Assign player to TOTT slot
   const handleSelectPlayerForSlot = (selectedPlayer: Player) => {
     if (!editingSlot) return;
 
-    // Check duplicate selection
     const allAssignedIds = [
       ...starters.map((s) => s.player_id),
       ...substitutes.map((s) => s.player_id),
     ].filter((id) => id > 0);
 
     if (allAssignedIds.includes(selectedPlayer.id)) {
-      alert(`${selectedPlayer.name} is already assigned to a position. Please select a different player.`);
+      alert(`${selectedPlayer.name} is already in the lineup. Please choose another player.`);
       return;
     }
 
@@ -195,413 +323,485 @@ export default function AdminAwardsPage() {
     setEditingSlot(null);
   };
 
-  // Save awards settings
-  const handleSaveAwards = async (explicitChanges: any = {}) => {
-    setSaving(true);
-    setFeedback(null);
-
-    const payload = {
-      pot_mode: potMode,
-      pot_player_id: potMode === 'manual' ? potPlayerId : null,
-      pot_locked: potLocked,
-      pot_revealed: potRevealed,
-      tott_revealed: tottRevealed,
-      tott_data: {
+  // Save TOTT changes
+  const handleSaveTott = () => {
+    handleUpdateAward('tott', {
+      data_json: {
         formation,
         starters,
         substitutes,
       },
-      ...explicitChanges,
-    };
+    });
+  };
 
-    try {
-      const res = await fetch('/api/admin/awards', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+  // Get award helper
+  const getAward = (key: AwardKey): AwardItem | undefined => {
+    return awardsList.find((a) => a.award_key === key);
+  };
 
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Failed to save awards');
-
-      setFeedback({ type: 'success', message: 'Tournament awards configuration saved successfully!' });
-      fetchAwardsData();
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Error updating awards' });
-    } finally {
-      setSaving(false);
+  // Render Status Badge
+  const renderStatusBadge = (status: AwardStatus) => {
+    switch (status) {
+      case 'published':
+        return (
+          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+            <span>Published</span>
+          </span>
+        );
+      case 'locked':
+        return (
+          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center space-x-1">
+            <Lock className="w-2.5 h-2.5" />
+            <span>Locked</span>
+          </span>
+        );
+      case 'ready':
+        return (
+          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1">
+            <Sparkles className="w-2.5 h-2.5" />
+            <span>Ready</span>
+          </span>
+        );
+      case 'in_progress':
+        return (
+          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40">
+            In Progress
+          </span>
+        );
+      default:
+        return (
+          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700">
+            Not Started
+          </span>
+        );
     }
   };
 
-  // Reveal / Hide Player of the Tournament toggle
-  const handleToggleRevealPOT = () => {
-    const nextState = !potRevealed;
-    if (nextState) {
-      const confirmReveal = window.confirm(
-        'Are you sure you want to officially REVEAL the Player of the Tournament to all public visitors? This will appear on the public awards ceremony page.'
-      );
-      if (!confirmReveal) return;
-    }
-    setPotRevealed(nextState);
-    handleSaveAwards({ pot_revealed: nextState });
-  };
-
-  // Reveal / Hide Team of the Tournament toggle
-  const handleToggleRevealTOTT = () => {
-    // Validate that 5 starters and 2 subs are assigned
-    const validStarters = starters.filter((s) => s.player_id > 0);
-    const validSubs = substitutes.filter((s) => s.player_id > 0);
-
-    if (!tottRevealed && (validStarters.length < 5 || validSubs.length < 2)) {
-      alert('Please select all 5 starting players and 2 substitutes before revealing the Team of the Tournament.');
-      return;
-    }
-
-    const nextState = !tottRevealed;
-    if (nextState) {
-      const confirmReveal = window.confirm(
-        'Are you sure you want to officially REVEAL the Team of the Tournament (Best 7) to all public visitors?'
-      );
-      if (!confirmReveal) return;
-    }
-    setTottRevealed(nextState);
-    handleSaveAwards({ tott_revealed: nextState });
-  };
-
-  if (loading) {
-    return (
-      <div className="py-20 text-center text-slate-400 space-y-3">
-        <RefreshCw className="w-8 h-8 animate-spin mx-auto text-emerald-400" />
-        <p className="font-semibold text-sm">Loading tournament awards hub...</p>
-      </div>
-    );
-  }
-
-  // Current automatic leader
-  const currentAutoLeader = playerOfTheTournament.length > 0 ? playerOfTheTournament[0].player : null;
-  const currentSelectedWinner =
-    potMode === 'manual'
-      ? players.find((p) => p.id === potPlayerId) || null
-      : currentAutoLeader;
+  const allRevealed = awardsList.length > 0 && awardsList.every((a) => a.is_revealed);
+  const anyRevealed = awardsList.some((a) => a.is_revealed);
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
-            Official End-of-Tournament Ceremony
-          </span>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tight mt-1 flex items-center space-x-2.5">
-            <span>Tournament Awards Hub</span>
-            <Trophy className="w-7 h-7 text-amber-400" />
-          </h1>
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Technical Honors</span>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tight">Tournament Awards Management</h1>
           <p className="text-sm text-slate-400">
-            Private administrator portal to monitor rankings, select Player of the Tournament, construct the Best 7, and officially reveal honors.
+            Manage all 7 tournament honors privately until the final, review candidates, verify ties, and reveal the ceremony.
           </p>
         </div>
 
-        <Link
-          href="/awards"
-          target="_blank"
-          className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-pitch-card hover:bg-white/10 text-white font-bold text-xs uppercase tracking-wider border border-white/10 self-start sm:self-auto transition"
-        >
-          <Eye className="w-3.5 h-3.5 text-emerald-400" />
-          <span>View Public Ceremony Page ↗</span>
-        </Link>
+        <div className="flex items-center space-x-2">
+          <Link
+            href="/awards"
+            target="_blank"
+            className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-bold transition flex items-center space-x-1.5"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>View Public Awards</span>
+          </Link>
+
+          <button
+            onClick={() => handleRevealAll(!allRevealed)}
+            disabled={saving}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow-glow transition flex items-center space-x-1.5 ${
+              allRevealed
+                ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30'
+                : 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 text-pitch-darkest hover:opacity-95'
+            }`}
+          >
+            {allRevealed ? (
+              <>
+                <EyeOff className="w-4 h-4" />
+                <span>Hide All Awards</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>⭐ Reveal All Awards Together</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {feedback && (
         <div
-          className={`p-4 rounded-xl border text-xs flex items-center space-x-2.5 ${
+          className={`p-3.5 rounded-xl border text-xs flex items-center space-x-2 ${
             feedback.type === 'success'
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
               : 'bg-red-500/15 border-red-500/30 text-red-300'
           }`}
         >
           {feedback.type === 'success' ? (
-            <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+            <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
           ) : (
-            <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
           )}
           <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* TABS: POT vs TEAM OF THE TOURNAMENT */}
-      <div className="flex items-center justify-center">
-        <div className="inline-flex p-1.5 rounded-2xl bg-pitch-card border border-pitch-border shadow-lg">
-          <button
-            onClick={() => setActiveTab('pot')}
-            className={`flex items-center space-x-2 px-5 sm:px-8 py-2.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider transition ${
-              activeTab === 'pot'
-                ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-pitch-darkest shadow-glow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Crown className="w-4 h-4" />
-            <span>👑 Player of the Tournament</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('tott')}
-            className={`flex items-center space-x-2 px-5 sm:px-8 py-2.5 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider transition ${
-              activeTab === 'tott'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-pitch-darkest shadow-glow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>⭐ Team of Tournament (Best 7)</span>
-          </button>
-        </div>
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            activeTab === 'overview'
+              ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
+              : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300'
+          }`}
+        >
+          <Trophy className="w-4 h-4" />
+          <span>All 7 Awards ({awardsList.filter((a) => a.is_revealed).length}/7 Revealed)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pot')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            activeTab === 'pot'
+              ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
+              : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300'
+          }`}
+        >
+          <Crown className="w-4 h-4 text-amber-400" />
+          <span>Player of Tournament</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('tott')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            activeTab === 'tott'
+              ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
+              : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300'
+          }`}
+        >
+          <Users className="w-4 h-4 text-emerald-400" />
+          <span>Team of Tournament (Best 7)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('goalkeepers')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            activeTab === 'goalkeepers'
+              ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
+              : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300'
+          }`}
+        >
+          <Shield className="w-4 h-4 text-blue-400" />
+          <span>Goalkeepers & Clean Sheets</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('weights')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 ${
+            activeTab === 'weights'
+              ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
+              : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-slate-400" />
+          <span>Scoring Formula</span>
+        </button>
       </div>
 
-      {/* SECTION 1: PLAYER OF THE TOURNAMENT */}
-      {activeTab === 'pot' && (
+      {/* TAB 1: ALL 7 AWARDS OVERVIEW */}
+      {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Status & Reveal Control Card */}
-          <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-amber-500/40 bg-gradient-to-br from-amber-950/20 via-pitch-card to-pitch-darkest space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Public Status:</span>
-                  {potRevealed ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1">
-                      <Eye className="w-3 h-3 text-emerald-400" />
-                      <span>🌐 Officially Revealed (Public)</span>
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1">
-                      <Lock className="w-3 h-3 text-amber-400" />
-                      <span>🔒 Secret (Admin Only - Hidden from Public)</span>
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 max-w-xl">
-                  {potRevealed
-                    ? 'The award is currently published on the public awards page. Visitors can see the Golden Ball certificate and tournament stats.'
-                    : 'The candidate leaderboard and winner selection are strictly confidential. Visitors only see the locked ceremony announcement until you click Reveal.'}
-                </p>
-              </div>
-
-              {/* Reveal Action Button */}
-              <button
-                type="button"
-                onClick={handleToggleRevealPOT}
-                className={`px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition shadow-lg flex items-center space-x-2 self-start sm:self-auto ${
-                  potRevealed
-                    ? 'bg-white/10 hover:bg-red-500/20 text-red-300 border border-red-500/30'
-                    : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-pitch-darkest shadow-glow'
-                }`}
-              >
-                {potRevealed ? (
-                  <>
-                    <EyeOff className="w-4 h-4" />
-                    <span>Hide Award from Public</span>
-                  </>
-                ) : (
-                  <>
-                    <Trophy className="w-4 h-4" />
-                    <span>🏆 Reveal Award to Public</span>
-                  </>
-                )}
-              </button>
+          <div className="glass-panel rounded-2xl p-4 sm:p-6 border border-pitch-border bg-pitch-card/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center space-x-2">
+                <span>Centralized Ceremony Dashboard</span>
+                <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  {awardsList.filter((a) => a.is_revealed).length} of 7 Published
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400">
+                You can configure each award individually, choose between automatic statistical leader or manual override, lock selections, and reveal them individually or all at once.
+              </p>
             </div>
 
-            {/* Winner Selection Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-              {/* Winner Spotlight Card */}
-              <div className="p-5 rounded-2xl bg-pitch-darkest/90 border border-amber-500/30 flex items-center space-x-4">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-3xl shadow-glow text-pitch-darkest flex-shrink-0">
-                  👑
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block">
-                    {potMode === 'auto' ? 'Automatic Selected Winner (#1)' : 'Manual Admin Selected Winner'}
-                  </span>
-                  <h3 className="text-xl font-black text-white truncate" dir="auto">
-                    {currentSelectedWinner ? currentSelectedWinner.name : 'No winner chosen'}
-                  </h3>
-                  <div className="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
-                    <Shield className="w-3.5 h-3.5" />
-                    <span dir="auto">{currentSelectedWinner?.team_name || 'Team'}</span>
-                    <span className="text-amber-400 font-mono font-bold">
-                      • {currentSelectedWinner?.overall_points || 0} POT Points
-                    </span>
+            <button
+              onClick={() => handleRevealAll(!allRevealed)}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-amber-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow hover:bg-amber-300 transition flex items-center space-x-1.5 flex-shrink-0"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{allRevealed ? 'Hide All Awards' : 'Reveal All Awards Together'}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {awardsList.map((award) => {
+              const isLocked = award.is_locked;
+              const isRevealed = award.is_revealed;
+              const isManual = award.selection_mode === 'manual';
+
+              return (
+                <div
+                  key={award.award_key}
+                  className={`glass-panel rounded-2xl border p-5 space-y-4 flex flex-col justify-between ${
+                    isRevealed
+                      ? 'border-emerald-500/50 bg-pitch-card/90 shadow-glow'
+                      : isLocked
+                      ? 'border-purple-500/40 bg-pitch-card/80'
+                      : 'border-pitch-border bg-pitch-card/70'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      {renderStatusBadge(award.status)}
+
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => handleUpdateAward(award.award_key, { is_locked: !isLocked })}
+                          title={isLocked ? 'Unlock award' : 'Lock award'}
+                          className={`p-1.5 rounded-lg border text-xs transition ${
+                            isLocked
+                              ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                        </button>
+
+                        <button
+                          onClick={() => handleUpdateAward(award.award_key, { is_revealed: !isRevealed })}
+                          title={isRevealed ? 'Hide from public' : 'Reveal to public'}
+                          className={`p-1.5 rounded-lg border text-xs transition ${
+                            isRevealed
+                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                              : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {isRevealed ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="font-bold text-white text-base">{award.title}</h3>
+                      <p className="text-xs text-slate-400">{award.subtitle}</p>
+                    </div>
+
+                    {/* Winner / Current Leader Preview */}
+                    <div className="p-3 rounded-xl bg-pitch-darkest/70 border border-white/5 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">Current Selection:</span>
+                        <span className="text-[10px] font-mono uppercase text-slate-400">
+                          {isManual ? 'Manual Override' : 'Auto Statistical'}
+                        </span>
+                      </div>
+
+                      {award.award_key === 'tott' ? (
+                        <div className="text-xs text-emerald-300 font-bold">
+                          Best 7 ({starters.filter((s) => s.player_id > 0).length} Starters +{' '}
+                          {substitutes.filter((s) => s.player_id > 0).length} Subs)
+                        </div>
+                      ) : award.winner ? (
+                        <div className="flex items-center justify-between">
+                          <div className="truncate">
+                            <span className="font-bold text-white text-xs block truncate" dir="auto">
+                              {award.winner.name}
+                            </span>
+                            <span className="text-[11px] text-slate-400" dir="auto">
+                              {award.winner.team_name}
+                            </span>
+                          </div>
+                          {award.top_candidate && (
+                            <span className="text-xs font-mono font-bold text-amber-400">
+                              {award.award_key === 'golden_boot' && `${award.winner.goals || 0} Goals`}
+                              {award.award_key === 'best_playmaker' && `${award.winner.assists || 0} Assists`}
+                              {award.award_key === 'best_gk' && `${award.winner.clean_sheets || 0} CS`}
+                              {award.award_key === 'most_clean_sheets' && `${award.winner.clean_sheets || 0} CS`}
+                              {award.award_key === 'most_mvps' && `${award.winner.mvps || 0} MVPs`}
+                              {award.award_key === 'pot' && `${award.winner.overall_points || 0} Pts`}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500 italic">No leader yet</span>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Manual Override Dropdown */}
+                  {award.award_key !== 'tott' && (
+                    <div className="pt-2 border-t border-white/5 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <label className="text-[11px] font-semibold text-slate-400">Selection Mode</label>
+                        <button
+                          onClick={() =>
+                            handleUpdateAward(award.award_key, {
+                              selection_mode: isManual ? 'auto' : 'manual',
+                              winner_player_id: isManual ? null : award.winner?.id,
+                            })
+                          }
+                          className="text-[10px] font-bold text-emerald-400 hover:underline"
+                        >
+                          Switch to {isManual ? 'Auto' : 'Manual'}
+                        </button>
+                      </div>
+
+                      {isManual && (
+                        <select
+                          value={award.winner_player_id || ''}
+                          onChange={(e) =>
+                            handleUpdateAward(award.award_key, {
+                              selection_mode: 'manual',
+                              winner_player_id: e.target.value ? parseInt(e.target.value) : null,
+                            })
+                          }
+                          className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="">Select winner manually...</option>
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.team_name || 'Team'})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
                 </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: PLAYER OF THE TOURNAMENT */}
+      {activeTab === 'pot' && (
+        <div className="space-y-6">
+          <div className="glass-panel rounded-2xl p-6 border border-pitch-border bg-pitch-card/70 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-400 text-xs font-bold uppercase mb-2">
+                <Crown className="w-3.5 h-3.5" />
+                <span>Golden Ball Leaderboard</span>
               </div>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">
+                Player of the Tournament
+              </h2>
+              <p className="text-xs text-slate-400 max-w-xl">
+                Automatically ranked by performance points: Goals (+{weights.goal}), Assists (+{weights.assist}), MOTM (+{weights.motm}), GK Clean Sheet (+{weights.gk_clean_sheet}), DEF Clean Sheet (+{weights.def_clean_sheet}), Cards ({weights.yellow_card}/{weights.red_card}). Minimum {minAppearances} appearances required for automatic eligibility.
+              </p>
+            </div>
 
-              {/* Selection Mode Controls */}
-              <div className="space-y-3 p-4 rounded-2xl bg-pitch-card border border-white/5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-300 uppercase">Selection Mode:</span>
-                  <div className="inline-flex p-1 rounded-xl bg-pitch-darkest border border-white/10">
-                    <button
-                      type="button"
-                      onClick={() => setPotMode('auto')}
-                      className={`px-3 py-1 rounded-lg font-bold transition ${
-                        potMode === 'auto' ? 'bg-amber-400 text-pitch-darkest' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      ⚡ Auto (#1)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPotMode('manual')}
-                      className={`px-3 py-1 rounded-lg font-bold transition ${
-                        potMode === 'manual' ? 'bg-purple-500 text-white' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      🔒 Manual
-                    </button>
-                  </div>
-                </div>
-
-                {potMode === 'manual' && (
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                      Choose Winner (Any Registered Player):
-                    </label>
-                    <select
-                      value={potPlayerId || ''}
-                      onChange={(e) => setPotPlayerId(e.target.value ? Number(e.target.value) : null)}
-                      className="w-full bg-pitch-darkest border border-amber-500/40 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:border-amber-400"
-                    >
-                      <option value="">-- Choose Winner --</option>
-                      {players.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.team_name}) - {p.overall_points || 0} pts
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between pt-2 border-t border-white/5">
-                  <button
-                    type="button"
-                    onClick={() => setPotLocked(!potLocked)}
-                    className="flex items-center space-x-1.5 text-slate-400 hover:text-white font-semibold"
-                  >
-                    {potLocked ? <Lock className="w-3.5 h-3.5 text-amber-400" /> : <Unlock className="w-3.5 h-3.5" />}
-                    <span>{potLocked ? 'Selection Locked' : 'Selection Unlocked'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => handleSaveAwards()}
-                    className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-pitch-darkest font-black uppercase tracking-wider transition shadow-sm flex items-center space-x-1"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{saving ? 'Saving...' : 'Save Winner'}</span>
-                  </button>
-                </div>
-              </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => {
+                  const pot = getAward('pot');
+                  if (pot) handleUpdateAward('pot', { is_revealed: !pot.is_revealed });
+                }}
+                className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ${
+                  getAward('pot')?.is_revealed
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-pitch-darkest shadow-glow'
+                }`}
+              >
+                {getAward('pot')?.is_revealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <span>{getAward('pot')?.is_revealed ? 'Hide POT Award' : 'Reveal POT Award'}</span>
+              </button>
             </div>
           </div>
 
-          {/* INTERNAL CANDIDATE LEADERBOARD */}
-          <div className="glass-panel rounded-2xl border border-pitch-border bg-pitch-card/80 overflow-hidden shadow-xl space-y-4 p-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
-              <div className="flex items-center space-x-2">
-                <Trophy className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="font-bold text-white text-base">
-                    Candidate Leaderboard (Confidential Admin View)
-                  </h3>
-                  <span className="text-xs text-slate-400">
-                    Calculated automatically from Goals(×5) + Assists(×3) + MVPs(×10) + Apps(×2) − Cards
-                  </span>
-                </div>
-              </div>
-              <span className="text-xs text-amber-400 font-mono">
-                {playerOfTheTournament.length} Ranked Contenders
-              </span>
+          <div className="glass-panel rounded-2xl border border-pitch-border bg-pitch-card/80 overflow-hidden shadow-xl">
+            <div className="p-4 bg-pitch-darkest/60 border-b border-white/5 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                <Crown className="w-4 h-4 text-amber-400" />
+                <span>Performance Ranking ({playerOfTheTournament.length} Candidates)</span>
+              </h3>
+              <span className="text-xs text-slate-400 font-mono">Min {minAppearances} Apps Required</span>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-pitch-darkest/40">
-                    <th className="py-3 px-3 text-center w-14">Rank</th>
-                    <th className="py-3 px-4">Player Name</th>
+                    <th className="py-3 px-4 text-center w-14">Rank</th>
+                    <th className="py-3 px-4">Player</th>
                     <th className="py-3 px-4">Team</th>
-                    <th className="py-3 px-3 text-center">Apps</th>
-                    <th className="py-3 px-3 text-center">Goals</th>
-                    <th className="py-3 px-3 text-center">Assists</th>
-                    <th className="py-3 px-3 text-center">MVPs</th>
-                    <th className="py-3 px-4 text-center font-black text-amber-400">Performance Points</th>
-                    <th className="py-3 px-3 text-center">Action</th>
+                    <th className="py-3 px-4 text-center">Apps</th>
+                    <th className="py-3 px-4 text-center">Goals</th>
+                    <th className="py-3 px-4 text-center">Assists</th>
+                    <th className="py-3 px-4 text-center">MVPs</th>
+                    <th className="py-3 px-4 text-center">Clean Sheets</th>
+                    <th className="py-3 px-4 text-center font-black text-amber-400">Total Points</th>
+                    <th className="py-3 px-4 text-center">Eligible?</th>
+                    <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {playerOfTheTournament.map((item, index) => {
-                    const isSelected =
-                      (potMode === 'manual' && potPlayerId === item.player.id) ||
-                      (potMode === 'auto' && index === 0);
+                  {playerOfTheTournament.map((item, idx) => {
+                    const isTop = idx === 0;
+                    const pot = getAward('pot');
+                    const isSelected = pot?.winner_player_id === item.player.id || (!pot?.winner_player_id && isTop);
 
                     return (
                       <tr
                         key={item.player.id}
                         className={`transition hover:bg-white/[0.04] ${
-                          isSelected ? 'bg-amber-500/15 border-l-2 border-amber-400' : ''
+                          isSelected ? 'bg-amber-950/25 border-l-4 border-amber-400' : ''
                         }`}
                       >
-                        <td className="py-3 px-3 text-center font-bold">
-                          {index === 0 ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/50 text-xs font-black">
-                              1
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-mono text-xs">{item.rank}</span>
-                          )}
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-xs text-slate-400">
+                          {idx + 1}
                         </td>
-                        <td className="py-3 px-4 font-semibold text-white" dir="auto">
+                        <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                           <div className="flex items-center space-x-2">
-                            <span className="hover:text-amber-400 transition">{item.player.name}</span>
+                            <span>{item.player.name}</span>
                             {item.player.is_captain && (
-                              <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
+                              <span className="text-[10px] bg-slate-700 text-slate-300 px-1 py-0.2 rounded font-bold">
                                 (C)
                               </span>
                             )}
-                            {isSelected && (
-                              <span className="text-[10px] bg-amber-400 text-pitch-darkest px-2 py-0.2 rounded font-black uppercase">
-                                Winner
+                            {item.player.is_goalkeeper && (
+                              <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-1.5 py-0.2 rounded font-bold">
+                                GK
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-slate-300 text-xs" dir="auto">
+                        <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
                           {item.player.team_name}
                         </td>
-                        <td className="py-3 px-3 text-center font-mono text-xs text-white">
-                          {item.appearances || item.player.matches_played || 0}
+                        <td className="py-3.5 px-4 text-center font-mono text-xs">{item.appearances}</td>
+                        <td className="py-3.5 px-4 text-center font-mono text-xs">{item.goals}</td>
+                        <td className="py-3.5 px-4 text-center font-mono text-xs">{item.assists}</td>
+                        <td className="py-3.5 px-4 text-center font-mono text-xs">{item.mvps}</td>
+                        <td className="py-3.5 px-4 text-center font-mono text-xs">{item.player.clean_sheets || 0}</td>
+                        <td className="py-3.5 px-4 text-center font-mono font-black text-amber-400 text-sm">
+                          {item.points}
                         </td>
-                        <td className="py-3 px-3 text-center font-mono font-bold text-white">
-                          {item.goals}
+                        <td className="py-3.5 px-4 text-center">
+                          {item.is_eligible ? (
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-700 text-slate-400" title={`Needs at least ${minAppearances} matches`}>
+                              &lt; {minAppearances} Apps
+                            </span>
+                          )}
                         </td>
-                        <td className="py-3 px-3 text-center font-mono font-bold text-white">
-                          {item.assists}
-                        </td>
-                        <td className="py-3 px-3 text-center font-mono font-bold text-amber-400">
-                          {item.mvps} ⭐
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono font-black text-sm text-amber-400">
-                          {item.points} pts
-                        </td>
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-4 text-right">
                           <button
-                            type="button"
-                            onClick={() => {
-                              setPotMode('manual');
-                              setPotPlayerId(item.player.id);
-                              handleSaveAwards({ pot_mode: 'manual', pot_player_id: item.player.id });
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-pitch-darkest hover:bg-amber-400 hover:text-pitch-darkest border border-white/10 text-[11px] font-bold text-slate-300 transition"
+                            onClick={() =>
+                              handleUpdateAward('pot', {
+                                selection_mode: 'manual',
+                                winner_player_id: item.player.id,
+                              })
+                            }
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                              isSelected
+                                ? 'bg-amber-400 text-pitch-darkest font-black'
+                                : 'bg-white/5 hover:bg-white/15 text-slate-300'
+                            }`}
                           >
-                            Pick Winner
+                            {isSelected ? 'Selected' : 'Select Winner'}
                           </button>
                         </td>
                       </tr>
@@ -614,155 +814,111 @@ export default function AdminAwardsPage() {
         </div>
       )}
 
-      {/* SECTION 2: TEAM OF THE TOURNAMENT (5 STARTERS + 2 SUBS = 7 PLAYERS) */}
+      {/* TAB 3: TEAM OF THE TOURNAMENT (BEST 5 + 2 SUBS) */}
       {activeTab === 'tott' && (
         <div className="space-y-6">
-          {/* Status & Formation Header */}
-          <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-emerald-500/40 bg-gradient-to-br from-emerald-950/20 via-pitch-card to-pitch-darkest space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-6">
-              <div className="space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Public Status:</span>
-                  {tottRevealed ? (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1">
-                      <Eye className="w-3 h-3 text-emerald-400" />
-                      <span>🌐 Officially Revealed (Public)</span>
-                    </span>
-                  ) : (
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center space-x-1">
-                      <Lock className="w-3 h-3 text-amber-400" />
-                      <span>🔒 Secret (Admin Only - Hidden from Public)</span>
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400 max-w-xl">
-                  Official tournament format: <strong>5 Starting on Pitch + 2 Substitutes on Bench = 7 Players Total.</strong>
-                </p>
+          <div className="glass-panel rounded-2xl p-6 border border-pitch-border bg-pitch-card/70 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div>
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 text-xs font-bold uppercase mb-2">
+                <Users className="w-3.5 h-3.5" />
+                <span>Best 7 Selection</span>
               </div>
-
-              <div className="flex items-center space-x-3 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={handleLoadSuggestion}
-                  className="px-4 py-2.5 rounded-xl bg-pitch-card hover:bg-white/10 text-white font-bold text-xs uppercase tracking-wider border border-white/10 transition flex items-center space-x-1.5"
-                >
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Auto-Pick Best 7</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleToggleRevealTOTT}
-                  className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition shadow-lg flex items-center space-x-2 ${
-                    tottRevealed
-                      ? 'bg-white/10 hover:bg-red-500/20 text-red-300 border border-red-500/30'
-                      : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest shadow-glow'
-                  }`}
-                >
-                  {tottRevealed ? (
-                    <>
-                      <EyeOff className="w-4 h-4" />
-                      <span>Hide Lineup</span>
-                    </>
-                  ) : (
-                    <>
-                      <Star className="w-4 h-4" />
-                      <span>⭐ Reveal Team of Tournament</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">Team of the Tournament</h2>
+              <p className="text-xs text-slate-400 max-w-xl">
+                Select 5 starters on the pitch (1 Goalkeeper + 4 Outfield) and 2 substitutes. Choose your formation and click any player capsule to assign a player.
+              </p>
             </div>
 
-            {/* Formation Selector Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-bold uppercase text-slate-300">5-a-side Formation:</span>
-                {['1-2-1', '2-2', '1-1-2', '2-1-1'].map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => handleFormationChange(f)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
-                      formation === f
-                        ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
-                        : 'bg-pitch-darkest text-slate-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleLoadSuggestion}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-bold transition flex items-center space-x-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Load Top Performers</span>
+              </button>
 
               <button
-                type="button"
-                disabled={saving}
-                onClick={() => handleSaveAwards()}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider transition flex items-center space-x-1.5 shadow-sm"
+                onClick={handleSaveTott}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-1.5"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>{saving ? 'Saving Lineup...' : 'Save Lineup Selection'}</span>
+                <span>Save Team of Tournament</span>
+              </button>
+
+              <button
+                onClick={() => handleUpdateAward('tott', { is_revealed: !tottRevealed })}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ${
+                  tottRevealed
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30'
+                    : 'bg-amber-400 hover:bg-amber-300 text-pitch-darkest shadow-glow'
+                }`}
+              >
+                {tottRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <span>{tottRevealed ? 'Hide TOTT' : 'Reveal TOTT'}</span>
               </button>
             </div>
           </div>
 
-          {/* VISUAL 5-A-SIDE PITCH EDITOR */}
-          <div className="glass-panel rounded-3xl p-4 sm:p-8 border border-pitch-border bg-pitch-card/90 space-y-6">
-            <div className="text-center">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Tactical Board</span>
-              <h3 className="text-xl font-black text-white">Starting 5 ({formation})</h3>
-              <p className="text-xs text-slate-400">Click any position slot to assign or swap a tournament player.</p>
-            </div>
+          {/* Formation selector */}
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-bold text-slate-400 uppercase">Formation:</span>
+            {['1-2-1', '2-2', '1-1-2', '2-1-1'].map((fmt) => (
+              <button
+                key={fmt}
+                onClick={() => handleFormationChange(fmt)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition ${
+                  formation === fmt
+                    ? 'bg-emerald-500 text-pitch-darkest shadow-glow'
+                    : 'bg-pitch-card hover:bg-pitch-cardHover text-slate-300 border border-white/5'
+                }`}
+              >
+                {fmt}
+              </button>
+            ))}
+          </div>
 
-            {/* Pitch Container */}
-            <div className="relative w-full max-w-xl mx-auto aspect-[3/4] sm:aspect-[4/5] rounded-3xl overflow-hidden border-4 border-emerald-500/50 shadow-2xl bg-gradient-to-b from-emerald-950/70 via-emerald-900/50 to-emerald-950/80">
-              {/* Pitch Markings */}
-              {/* Half-way line */}
-              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-white/20 -translate-y-1/2" />
-              {/* Center Circle */}
-              <div className="absolute top-1/2 left-1/2 w-28 h-28 border border-white/20 rounded-full -translate-x-1/2 -translate-y-1/2" />
-              {/* Center Spot */}
-              <div className="absolute top-1/2 left-1/2 w-2 h-2 bg-white/40 rounded-full -translate-x-1/2 -translate-y-1/2" />
-              {/* Top Goal Box (Opponent) */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-44 h-16 border-b border-x border-white/20 rounded-b-xl" />
-              {/* Bottom Goal Box (GK Area) */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 h-20 border-t border-x border-white/25 rounded-t-xl" />
-              {/* Penalty Spot Bottom */}
-              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/40 rounded-full" />
+          {/* 5-A-SIDE PITCH VISUALIZER */}
+          <div className="relative w-full max-w-2xl mx-auto aspect-[3/4] sm:aspect-[4/5] rounded-3xl overflow-hidden border-2 border-emerald-500/40 shadow-2xl bg-gradient-to-b from-emerald-950/80 via-emerald-900/60 to-emerald-950/90 p-4 sm:p-6 flex flex-col justify-between">
+            {/* Pitch Markings */}
+            <div className="absolute inset-4 sm:inset-6 border-2 border-white/20 rounded-2xl pointer-events-none" />
+            <div className="absolute top-1/2 left-4 right-4 sm:left-6 sm:right-6 border-b border-white/20 -translate-y-1/2 pointer-events-none" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-28 h-28 sm:w-36 sm:h-36 rounded-full border border-white/20 pointer-events-none" />
+            <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 w-48 sm:w-60 h-20 sm:h-24 border-t-2 border-l-2 border-r-2 border-white/20 rounded-t-2xl pointer-events-none" />
+            <div className="absolute top-4 sm:top-6 left-1/2 -translate-x-1/2 w-48 sm:w-60 h-20 sm:h-24 border-b-2 border-l-2 border-r-2 border-white/20 rounded-b-2xl pointer-events-none" />
 
-              {/* 5 Starter Player Cards on Pitch */}
-              {starters.map((slot) => {
-                const isAssigned = slot.player_id > 0;
-
+            {/* Starters on pitch */}
+            <div className="relative w-full h-full">
+              {starters.map((starter) => {
+                const hasPlayer = starter.player_id > 0;
                 return (
                   <div
-                    key={slot.slot_id}
+                    key={starter.slot_id}
                     onClick={() =>
                       setEditingSlot({
-                        slot_id: slot.slot_id,
+                        slot_id: starter.slot_id,
                         slot_type: 'starter',
-                        position_label: slot.position_label,
+                        position_label: starter.position_label,
                       })
                     }
-                    className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition hover:scale-105 z-10"
-                    style={{ left: `${slot.pitch_x}%`, top: `${slot.pitch_y}%` }}
+                    style={{
+                      left: `${starter.pitch_x}%`,
+                      top: `${starter.pitch_y}%`,
+                    }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition transform hover:scale-105"
                   >
-                    <div
-                      className={`w-24 sm:w-28 p-2 rounded-2xl border text-center shadow-xl backdrop-blur-md transition ${
-                        isAssigned
-                          ? 'bg-pitch-darkest/90 border-emerald-400/80 text-white shadow-glow'
-                          : 'bg-pitch-darkest/60 border-dashed border-white/30 text-slate-400 hover:border-emerald-400'
-                      }`}
-                    >
-                      {/* Position Tag */}
-                      <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-500 text-pitch-darkest">
-                        {slot.position_label}
-                      </span>
-
-                      {/* Player Initials Avatar */}
-                      <div className="w-10 h-10 mx-auto my-1 rounded-full bg-pitch-card border border-white/20 flex items-center justify-center font-black text-xs text-white">
-                        {isAssigned
-                          ? slot.player_name
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center font-black text-sm shadow-xl border-2 transition ${
+                          hasPlayer
+                            ? starter.position_label === 'GK'
+                              ? 'bg-blue-600 text-white border-blue-400 shadow-glow'
+                              : 'bg-emerald-500 text-pitch-darkest border-emerald-300 shadow-glow'
+                            : 'bg-white/10 text-white border-white/30 border-dashed animate-pulse'
+                        }`}
+                      >
+                        {hasPlayer
+                          ? starter.player_name
                               .split(' ')
                               .map((n) => n[0])
                               .slice(0, 2)
@@ -770,170 +926,437 @@ export default function AdminAwardsPage() {
                               .toUpperCase()
                           : '+'}
                       </div>
-
-                      {/* Player Name */}
-                      <div className="text-[11px] font-bold truncate leading-tight" dir="auto">
-                        {isAssigned ? slot.player_name : 'Assign'}
-                      </div>
-
-                      {/* Team / Stats */}
-                      {isAssigned && (
-                        <div className="text-[9px] text-slate-300 font-mono mt-0.5 truncate">
-                          {slot.goals > 0 && `${slot.goals}G `}
-                          {slot.assists > 0 && `${slot.assists}A `}
-                          {slot.mvps > 0 && `${slot.mvps}⭐ `}
-                          {slot.goals === 0 && slot.assists === 0 && slot.mvps === 0 && slot.player_team_name}
-                        </div>
-                      )}
+                      <span className="text-[10px] font-black uppercase tracking-wider text-pitch-darkest bg-white/90 px-2 py-0.5 rounded-full mt-1.5 shadow-md">
+                        {starter.position_label}
+                      </span>
+                      <span className="text-[11px] font-bold text-white max-w-[90px] sm:max-w-[120px] text-center truncate drop-shadow mt-0.5" dir="auto">
+                        {starter.player_name}
+                      </span>
                     </div>
                   </div>
                 );
               })}
             </div>
+          </div>
 
-            {/* SUBSTITUTES BENCH (2 PLAYERS) */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-pitch-darkest/90 border border-white/10 space-y-3">
-              <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                <div className="flex items-center space-x-2">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                    Substitutes Bench (Exactly 2 Players)
-                  </h4>
-                </div>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {substitutes.filter((s) => s.player_id > 0).length} / 2 Assigned
-                </span>
+          {/* SUBSTITUTES BENCH (EXACTLY 2 PLAYERS) */}
+          <div className="max-w-2xl mx-auto p-4 rounded-2xl bg-pitch-darkest/70 border border-white/10 space-y-3">
+            <span className="text-xs font-bold uppercase text-slate-400 block text-center">
+              Official Substitutes Bench (2 Players)
+            </span>
+            <div className="grid grid-cols-2 gap-4">
+              {substitutes.map((sub, idx) => {
+                const hasPlayer = sub.player_id > 0;
+                return (
+                  <div
+                    key={sub.slot_id}
+                    onClick={() =>
+                      setEditingSlot({
+                        slot_id: sub.slot_id,
+                        slot_type: 'substitute',
+                        position_label: sub.position_label,
+                      })
+                    }
+                    className="p-3 rounded-xl bg-pitch-card border border-pitch-border hover:border-emerald-500/50 cursor-pointer transition flex items-center space-x-3"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center font-black text-xs flex-shrink-0">
+                      SUB {idx + 1}
+                    </div>
+                    <div className="truncate">
+                      <span className="font-bold text-white text-xs block truncate" dir="auto">
+                        {hasPlayer ? sub.player_name : '+ Click to Assign'}
+                      </span>
+                      <span className="text-[10px] text-slate-400" dir="auto">
+                        {hasPlayer ? sub.player_team_name : 'Bench Player'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: GOALKEEPERS & CLEAN SHEETS */}
+      {activeTab === 'goalkeepers' && (
+        <div className="space-y-8">
+          {/* Best Goalkeeper Award */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-white uppercase flex items-center space-x-2">
+                  <Shield className="w-5 h-5 text-blue-400" />
+                  <span>Best Goalkeeper (Golden Glove) Candidates</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Ranks goalkeepers by Clean Sheets, Clean Sheet %, Goals Conceded per Match, and Appearances as GK.
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {substitutes.map((slot) => {
-                  const isAssigned = slot.player_id > 0;
+              <button
+                onClick={() => {
+                  const bgk = getAward('best_gk');
+                  if (bgk) handleUpdateAward('best_gk', { is_revealed: !bgk.is_revealed });
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                  getAward('best_gk')?.is_revealed
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                    : 'bg-blue-500 hover:bg-blue-400 text-white shadow-glow'
+                }`}
+              >
+                {getAward('best_gk')?.is_revealed ? 'Hide Golden Glove' : 'Reveal Golden Glove'}
+              </button>
+            </div>
 
-                  return (
-                    <div
-                      key={slot.slot_id}
-                      onClick={() =>
-                        setEditingSlot({
-                          slot_id: slot.slot_id,
-                          slot_type: 'substitute',
-                          position_label: slot.position_label,
-                        })
-                      }
-                      className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition hover:border-emerald-400 ${
-                        isAssigned
-                          ? 'bg-pitch-card border-white/10 text-white'
-                          : 'bg-pitch-darkest border-dashed border-white/20 text-slate-400'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3 min-w-0">
-                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 flex-shrink-0">
-                          {slot.position_label}
-                        </span>
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold truncate block" dir="auto">
-                            {isAssigned ? slot.player_name : '+ Click to Assign Substitute'}
-                          </span>
-                          {isAssigned && (
-                            <span className="text-[10px] text-slate-400 truncate block" dir="auto">
-                              {slot.player_team_name} • {slot.goals}G {slot.assists}A {slot.mvps}⭐
-                            </span>
-                          )}
-                        </div>
-                      </div>
+            <div className="glass-panel rounded-2xl border border-pitch-border bg-pitch-card/80 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-pitch-darkest/40">
+                      <th className="py-3 px-4 text-center w-14">Rank</th>
+                      <th className="py-3 px-4">Goalkeeper</th>
+                      <th className="py-3 px-4">Team</th>
+                      <th className="py-3 px-4 text-center">GK Apps</th>
+                      <th className="py-3 px-4 text-center">Clean Sheets</th>
+                      <th className="py-3 px-4 text-center">Goals Conceded</th>
+                      <th className="py-3 px-4 text-center">CS %</th>
+                      <th className="py-3 px-4 text-center">G.C / Match</th>
+                      <th className="py-3 px-4 text-center">Tied?</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {bestGoalkeepers.map((item, idx) => {
+                      const bgk = getAward('best_gk');
+                      const isSelected = bgk?.winner_player_id === item.player.id || (!bgk?.winner_player_id && idx === 0);
 
-                      <span className="text-xs text-emerald-400 font-bold ml-2">Edit</span>
-                    </div>
-                  );
-                })}
+                      return (
+                        <tr
+                          key={item.player.id}
+                          className={`transition hover:bg-white/[0.04] ${
+                            isSelected ? 'bg-blue-950/25 border-l-4 border-blue-400' : ''
+                          }`}
+                        >
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-xs text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
+                            {item.player.name}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
+                            {item.player.team_name}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs">{item.appearances}</td>
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-blue-300 text-xs">
+                            {item.clean_sheets}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs">{item.goals_conceded}</td>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs">{item.clean_sheet_percentage}%</td>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs">
+                            {item.player.goals_conceded_per_match ?? '-'}
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            {item.is_tied && (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Tied
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              onClick={() =>
+                                handleUpdateAward('best_gk', {
+                                  selection_mode: 'manual',
+                                  winner_player_id: item.player.id,
+                                })
+                              }
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                isSelected
+                                  ? 'bg-blue-500 text-white font-black'
+                                  : 'bg-white/5 hover:bg-white/15 text-slate-300'
+                              }`}
+                            >
+                              {isSelected ? 'Selected' : 'Select'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Most Clean Sheets Award */}
+          <div className="space-y-4 pt-6 border-t border-white/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-white uppercase flex items-center space-x-2">
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                  <span>Most Clean Sheets Leaderboard</span>
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Ranks the defensive wall with the most clean sheets. Supports ties confirmation.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const mcs = getAward('most_clean_sheets');
+                  if (mcs) handleUpdateAward('most_clean_sheets', { is_revealed: !mcs.is_revealed });
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+                  getAward('most_clean_sheets')?.is_revealed
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-pitch-darkest shadow-glow'
+                }`}
+              >
+                {getAward('most_clean_sheets')?.is_revealed ? 'Hide Clean Sheets Award' : 'Reveal Clean Sheets Award'}
+              </button>
+            </div>
+
+            <div className="glass-panel rounded-2xl border border-pitch-border bg-pitch-card/80 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-pitch-darkest/40">
+                      <th className="py-3 px-4 text-center w-14">Rank</th>
+                      <th className="py-3 px-4">Goalkeeper</th>
+                      <th className="py-3 px-4">Team</th>
+                      <th className="py-3 px-4 text-center">Clean Sheets</th>
+                      <th className="py-3 px-4 text-center">GK Matches</th>
+                      <th className="py-3 px-4 text-center">Clean Sheet %</th>
+                      <th className="py-3 px-4 text-center">Tied?</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {cleanSheetsLeaderboard.map((item, idx) => {
+                      const mcs = getAward('most_clean_sheets');
+                      const isSelected = mcs?.winner_player_id === item.player.id || (!mcs?.winner_player_id && idx === 0);
+
+                      return (
+                        <tr
+                          key={item.player.id}
+                          className={`transition hover:bg-white/[0.04] ${
+                            isSelected ? 'bg-emerald-950/25 border-l-4 border-emerald-400' : ''
+                          }`}
+                        >
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-xs text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
+                            {item.player.name}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
+                            {item.player.team_name}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono font-bold text-emerald-300 text-sm">
+                            {item.clean_sheets}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs">{item.matches_as_gk}</td>
+                          <td className="py-3.5 px-4 text-center font-mono text-xs">{item.clean_sheet_percentage}%</td>
+                          <td className="py-3.5 px-4 text-center">
+                            {item.is_tied && (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Tied
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <button
+                              onClick={() =>
+                                handleUpdateAward('most_clean_sheets', {
+                                  selection_mode: 'manual',
+                                  winner_player_id: item.player.id,
+                                })
+                              }
+                              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                                isSelected
+                                  ? 'bg-emerald-500 text-pitch-darkest font-black'
+                                  : 'bg-white/5 hover:bg-white/15 text-slate-300'
+                              }`}
+                            >
+                              {isSelected ? 'Selected' : 'Select'}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* SLOT ASSIGNMENT MODAL (Select Player) */}
+      {/* TAB 5: SCORING FORMULA & WEIGHTS */}
+      {activeTab === 'weights' && (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="glass-panel rounded-2xl p-6 border border-pitch-border bg-pitch-card/70 space-y-2">
+            <h2 className="text-xl font-black text-white uppercase flex items-center space-x-2">
+              <Sliders className="w-5 h-5 text-emerald-400" />
+              <span>Scoring Weights & POT Eligibility</span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Customize how many points each match action awards toward the Player of the Tournament rankings.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveWeights} className="glass-panel rounded-2xl p-6 border border-pitch-border bg-pitch-card/80 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Goal Scored</label>
+                <input
+                  type="number"
+                  value={weights.goal}
+                  onChange={(e) => setWeights({ ...weights, goal: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Assist</label>
+                <input
+                  type="number"
+                  value={weights.assist}
+                  onChange={(e) => setWeights({ ...weights, assist: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Man of the Match (MOTM)</label>
+                <input
+                  type="number"
+                  value={weights.motm}
+                  onChange={(e) => setWeights({ ...weights, motm: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Goalkeeper Clean Sheet</label>
+                <input
+                  type="number"
+                  value={weights.gk_clean_sheet}
+                  onChange={(e) => setWeights({ ...weights, gk_clean_sheet: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Defender Clean Sheet Contribution</label>
+                <input
+                  type="number"
+                  value={weights.def_clean_sheet}
+                  onChange={(e) => setWeights({ ...weights, def_clean_sheet: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Yellow Card Penalty</label>
+                <input
+                  type="number"
+                  value={weights.yellow_card}
+                  onChange={(e) => setWeights({ ...weights, yellow_card: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Red Card Penalty</label>
+                <input
+                  type="number"
+                  value={weights.red_card}
+                  onChange={(e) => setWeights({ ...weights, red_card: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Min Appearances for POT</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={minAppearances}
+                  onChange={(e) => setMinAppearances(parseInt(e.target.value) || 3)}
+                  className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-white/10 flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-1.5"
+              >
+                <Save className="w-4 h-4" />
+                <span>{saving ? 'Saving...' : 'Save Formula Weights'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* SLOT ASSIGNMENT MODAL (FOR TEAM OF THE TOURNAMENT) */}
       {editingSlot && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md p-3 sm:p-6 flex min-h-full items-start justify-center">
           <div
-            className="w-full max-w-lg bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-5 sm:p-7 space-y-4 shadow-2xl my-6"
+            className="w-full max-w-lg bg-pitch-darkest border border-pitch-border rounded-2xl sm:rounded-3xl p-5 sm:p-8 space-y-5 shadow-2xl my-6 sm:my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                  Select Player for {editingSlot.position_label}
-                </span>
-                <h3 className="text-base font-black text-white">
-                  Assign to {editingSlot.slot_type === 'starter' ? 'Starting 5' : 'Bench'}
+                <h3 className="text-xl font-bold text-white">
+                  Assign Slot: {editingSlot.position_label} ({editingSlot.slot_type})
                 </h3>
+                <p className="text-xs text-slate-400">
+                  Select any registered tournament player for this position.
+                </p>
               </div>
               <button onClick={() => setEditingSlot(null)} className="text-slate-400 hover:text-white">
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Pick any registered tournament player. Players are sorted by performance points.
-            </p>
-
-            {/* Players List */}
-            <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
-              {players.map((p) => {
-                const allAssignedIds = [
-                  ...starters.map((s) => s.player_id),
-                  ...substitutes.map((s) => s.player_id),
-                ].filter((id) => id > 0);
-                const isAlreadySelected = allAssignedIds.includes(p.id);
-
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => !isAlreadySelected && handleSelectPlayerForSlot(p)}
-                    className={`p-3 rounded-xl border flex items-center justify-between transition ${
-                      isAlreadySelected
-                        ? 'bg-pitch-darkest/40 border-white/5 opacity-40 cursor-not-allowed'
-                        : 'bg-pitch-card hover:bg-emerald-500/15 border-white/10 hover:border-emerald-500/40 cursor-pointer'
-                    }`}
-                  >
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center space-x-1.5">
-                        <span className="font-bold text-white text-xs" dir="auto">
-                          {p.name}
-                        </span>
-                        {p.is_captain && (
-                          <span className="text-[9px] bg-slate-700 text-slate-300 px-1 rounded font-bold">
-                            (C)
-                          </span>
-                        )}
-                        {isAlreadySelected && (
-                          <span className="text-[9px] bg-white/10 text-slate-400 px-1.5 rounded font-medium">
-                            Assigned
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-slate-400 block" dir="auto">
-                        {p.team_name}
-                      </span>
-                    </div>
-
-                    <div className="text-right flex-shrink-0">
-                      <span className="font-mono font-bold text-xs text-emerald-400">
-                        {p.overall_points || 0} pts
-                      </span>
-                      <span className="text-[9px] text-slate-400 block">
-                        {p.goals || 0}G • {p.assists || 0}A • {p.mvps || 0}⭐
-                      </span>
-                    </div>
+            <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+              {players.map((p) => (
+                <div
+                  key={p.id}
+                  onClick={() => handleSelectPlayerForSlot(p)}
+                  className="p-3 rounded-xl bg-pitch-card border border-pitch-border hover:border-emerald-500/50 cursor-pointer transition flex items-center justify-between gap-3"
+                >
+                  <div className="truncate">
+                    <span className="font-bold text-white text-xs block truncate" dir="auto">
+                      {p.name}
+                    </span>
+                    <span className="text-[11px] text-slate-400" dir="auto">
+                      {p.team_name} • {p.position || 'Player'}
+                    </span>
                   </div>
-                );
-              })}
+
+                  <div className="text-right flex-shrink-0 text-xs font-mono">
+                    <span className="font-bold text-emerald-400 block">{p.overall_points || 0} Pts</span>
+                    <span className="text-[10px] text-slate-500">
+                      {p.goals || 0}G • {p.assists || 0}A • {p.mvps || 0}MVP
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="pt-2 border-t border-white/10 flex justify-end">
+            <div className="pt-3 border-t border-white/10 flex justify-end">
               <button
                 type="button"
                 onClick={() => setEditingSlot(null)}
-                className="px-4 py-2 rounded-xl bg-white/10 text-slate-300 text-xs font-bold hover:bg-white/20 transition"
+                className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold"
               >
                 Cancel
               </button>

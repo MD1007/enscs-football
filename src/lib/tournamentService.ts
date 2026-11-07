@@ -5,6 +5,7 @@ import {
   aggregatePlayerStats,
   calculateMatchMVP,
   isGroupStageComplete,
+  suggestTeamOfTournament,
 } from './calculations';
 import {
   Team,
@@ -16,6 +17,10 @@ import {
   GroupId,
   StandingRow,
   ActivityLog,
+  AwardKey,
+  AwardStatus,
+  AwardItem,
+  TournamentAwardsState,
 } from './types';
 
 // Ensure database is initialized
@@ -24,9 +29,10 @@ initDatabase();
 export function getFullTournamentData(options?: { isAdmin?: boolean }): TournamentData {
   // 1. Teams
   const teamsRaw = db.prepare(`
-    SELECT t.*, p.name as captain_name
+    SELECT t.*, p.name as captain_name, gp.name as goalkeeper_name
     FROM teams t
     LEFT JOIN players p ON t.captain_id = p.id
+    LEFT JOIN players gp ON t.goalkeeper_id = gp.id
     ORDER BY t.group_id ASC, t.name ASC
   `).all() as any[];
 
@@ -45,6 +51,8 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     playersByTeam[p.team_id].push({
       ...p,
       is_captain: Boolean(p.is_captain),
+      is_goalkeeper: Boolean(p.is_goalkeeper),
+      position: p.position || 'Attacker',
     });
   }
 
@@ -109,6 +117,17 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     settings[s.key] = s.value;
   }
 
+  const customWeights = {
+    goal: Number(settings.mvp_weight_goal ?? 4),
+    assist: Number(settings.mvp_weight_assist ?? 3),
+    motm: Number(settings.mvp_weight_motm ?? 3),
+    gk_clean_sheet: Number(settings.mvp_weight_gk_clean_sheet ?? 4),
+    def_clean_sheet: Number(settings.mvp_weight_def_clean_sheet ?? 2),
+    yellow_card: Number(settings.mvp_weight_yellow_card ?? -1),
+    red_card: Number(settings.mvp_weight_red_card ?? -3),
+  };
+  const minAppearances = Number(settings.pot_min_appearances ?? 3);
+
   // 6. Standings & Player Stats
   const standings: Record<GroupId, StandingRow[]> = {
     A: calculateGroupStandings('A', teams, matches),
@@ -118,16 +137,33 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
 
   const best_second = calculateBestSecondPlace(standings);
 
-  const { playersWithStats, topScorers, topAssists, topMVPs, playerOfTheTournament, yellowCards, redCards } = aggregatePlayerStats(
-    playersRaw.map((p) => ({ ...p, is_captain: Boolean(p.is_captain) })),
+  const {
+    playersWithStats,
+    topScorers,
+    topAssists,
+    topMVPs,
+    bestGoalkeepers,
+    cleanSheetsLeaderboard,
+    playerOfTheTournament,
+    yellowCards,
+    redCards,
+  } = aggregatePlayerStats(
+    playersRaw.map((p) => ({
+      ...p,
+      is_captain: Boolean(p.is_captain),
+      is_goalkeeper: Boolean(p.is_goalkeeper),
+      position: p.position || 'Attacker',
+    })),
     teams,
-    matches
+    matches,
+    customWeights,
+    minAppearances
   );
 
   // 7. Summary metrics
   const matchesPlayed = matches.filter((m) => m.status === 'finished').length;
   const matchesRemaining = matches.filter((m) => m.status === 'upcoming' || m.status === 'live').length;
-  
+
   let totalGoals = 0;
   for (const m of matches) {
     if (m.home_score !== null && m.home_score !== undefined) totalGoals += m.home_score;
@@ -140,72 +176,250 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
 
   const nextMatch = upcomingMatches.length > 0 ? upcomingMatches[0] : null;
 
-  // 8. Awards & Public Reveal Verification
-  const potRevealed = settings.awards_pot_revealed === 'true';
-  const tottRevealed = settings.awards_tott_revealed === 'true';
-  const potMode = settings.awards_pot_mode || 'auto';
-  const potLocked = settings.awards_pot_locked === 'true';
-  const potPlayerId = settings.awards_pot_player_id ? Number(settings.awards_pot_player_id) : null;
-
-  let potWinner: Player | null = null;
-  if (potMode === 'manual' && potPlayerId) {
-    potWinner = playersWithStats.find((p) => p.id === potPlayerId) || null;
-  } else if (playerOfTheTournament.length > 0) {
-    potWinner = playerOfTheTournament[0].player;
+  // 8. Awards Management & Server-Side Security
+  const awardsRows = db.prepare('SELECT * FROM tournament_awards').all() as any[];
+  const awardsRowMap: Record<string, any> = {};
+  for (const r of awardsRows) {
+    awardsRowMap[r.award_key] = r;
   }
 
-  let tottData: any = null;
-  if (settings.awards_tott_data) {
-    try {
-      tottData = JSON.parse(settings.awards_tott_data);
-    } catch (e) {
-      tottData = null;
-    }
-  }
+  const awardMeta: Record<AwardKey, { title: string; subtitle: string }> = {
+    pot: { title: 'Player of the Tournament', subtitle: 'Official Golden Ball Award 2026' },
+    tott: { title: 'Team of the Tournament', subtitle: 'Official Best 7 (5 Starters + 2 Substitutes)' },
+    golden_boot: { title: 'Golden Boot', subtitle: 'Tournament Top Goalscorer' },
+    best_playmaker: { title: 'Best Playmaker', subtitle: 'Tournament Assist Leader' },
+    best_gk: { title: 'Best Goalkeeper', subtitle: 'Golden Glove Award' },
+    most_clean_sheets: { title: 'Most Clean Sheets', subtitle: 'Defensive Wall of the Tournament' },
+    most_mvps: { title: 'Most Man of the Match Awards', subtitle: 'Tournament Kingpin Award' },
+  };
 
-  // If revealed, add prestige badges to the winning players
-  if (potRevealed && potWinner) {
-    if (!potWinner.nicknames) potWinner.nicknames = [];
-    if (!potWinner.nicknames.some((n) => n.title.includes('PLAYER OF THE TOURNAMENT'))) {
-      potWinner.nicknames.unshift({
-        title: '👑 PLAYER OF THE TOURNAMENT',
-        subtitle: 'Official Golden Ball Winner 2026',
-        color: 'amber',
-        icon: 'Crown',
-      });
-    }
-  }
+  const awardKeys: AwardKey[] = [
+    'pot',
+    'tott',
+    'golden_boot',
+    'best_playmaker',
+    'best_gk',
+    'most_clean_sheets',
+    'most_mvps',
+  ];
 
-  if (tottRevealed && tottData) {
-    const tottPlayerIds = new Set([
-      ...(tottData.starters || []).map((p: any) => p.player_id),
-      ...(tottData.substitutes || []).map((p: any) => p.player_id),
-    ]);
+  const awardItems: AwardItem[] = [];
 
-    playersWithStats.forEach((p) => {
-      if (tottPlayerIds.has(p.id)) {
-        if (!p.nicknames) p.nicknames = [];
-        if (!p.nicknames.some((n) => n.title.includes('TEAM OF THE TOURNAMENT'))) {
-          p.nicknames.push({
-            title: '⭐ TEAM OF THE TOURNAMENT',
-            subtitle: 'Official Best 7 Selection',
-            color: 'emerald',
-            icon: 'Star',
-          });
+  for (const key of awardKeys) {
+    const row = awardsRowMap[key] || {};
+    const meta = awardMeta[key];
+    const isLocked = Boolean(row.is_locked || (key === 'pot' && settings.awards_pot_locked === 'true'));
+    const isRevealed = Boolean(
+      row.is_revealed ||
+      (key === 'pot' && settings.awards_pot_revealed === 'true') ||
+      (key === 'tott' && settings.awards_tott_revealed === 'true')
+    );
+    const selectionMode = (row.selection_mode || (key === 'pot' ? (settings.awards_pot_mode || 'auto') : 'auto')) as 'auto' | 'manual';
+    const manualWinnerId = row.winner_player_id || (key === 'pot' && settings.awards_pot_player_id ? Number(settings.awards_pot_player_id) : null);
+
+    let candidates: any[] = [];
+    let topCandidate: any = null;
+    let winner: Player | null = null;
+    let dataJson: any = null;
+
+    if (key === 'pot') {
+      candidates = playerOfTheTournament;
+      topCandidate = playerOfTheTournament.length > 0 ? playerOfTheTournament[0].player : null;
+      winner = selectionMode === 'manual' && manualWinnerId
+        ? playersWithStats.find((p) => p.id === manualWinnerId) || null
+        : topCandidate;
+    } else if (key === 'tott') {
+      candidates = playersWithStats;
+      if (row.data_json) {
+        try {
+          dataJson = JSON.parse(row.data_json);
+        } catch (e) {
+          dataJson = null;
         }
       }
+      if (!dataJson && settings.awards_tott_data) {
+        try {
+          dataJson = JSON.parse(settings.awards_tott_data);
+        } catch (e) {
+          dataJson = null;
+        }
+      }
+      if (!dataJson) {
+        dataJson = suggestTeamOfTournament(playersWithStats, '1-2-1');
+      }
+    } else if (key === 'golden_boot') {
+      candidates = topScorers;
+      topCandidate = topScorers.length > 0 ? topScorers[0].player : null;
+      winner = selectionMode === 'manual' && manualWinnerId
+        ? playersWithStats.find((p) => p.id === manualWinnerId) || null
+        : topCandidate;
+    } else if (key === 'best_playmaker') {
+      candidates = topAssists;
+      topCandidate = topAssists.length > 0 ? topAssists[0].player : null;
+      winner = selectionMode === 'manual' && manualWinnerId
+        ? playersWithStats.find((p) => p.id === manualWinnerId) || null
+        : topCandidate;
+    } else if (key === 'best_gk') {
+      candidates = bestGoalkeepers;
+      topCandidate = bestGoalkeepers.length > 0 ? bestGoalkeepers[0].player : null;
+      winner = selectionMode === 'manual' && manualWinnerId
+        ? playersWithStats.find((p) => p.id === manualWinnerId) || null
+        : topCandidate;
+    } else if (key === 'most_clean_sheets') {
+      candidates = cleanSheetsLeaderboard;
+      topCandidate = cleanSheetsLeaderboard.length > 0 ? cleanSheetsLeaderboard[0].player : null;
+      winner = selectionMode === 'manual' && manualWinnerId
+        ? playersWithStats.find((p) => p.id === manualWinnerId) || null
+        : topCandidate;
+    } else if (key === 'most_mvps') {
+      candidates = topMVPs;
+      topCandidate = topMVPs.length > 0 ? topMVPs[0].player : null;
+      winner = selectionMode === 'manual' && manualWinnerId
+        ? playersWithStats.find((p) => p.id === manualWinnerId) || null
+        : topCandidate;
+    }
+
+    let status: AwardStatus = 'not_started';
+    if (isRevealed) {
+      status = 'published';
+    } else if (isLocked) {
+      status = 'locked';
+    } else if (winner || (key === 'tott' && dataJson)) {
+      status = 'ready';
+    } else if (matchesPlayed > 0) {
+      status = 'in_progress';
+    }
+
+    // Assign official prestige badges when revealed
+    if (isRevealed && winner) {
+      if (!winner.nicknames) winner.nicknames = [];
+      if (key === 'pot' && !winner.nicknames.some((n) => n.title.includes('PLAYER OF THE TOURNAMENT'))) {
+        winner.nicknames.unshift({
+          title: '👑 PLAYER OF THE TOURNAMENT',
+          subtitle: 'Official Golden Ball Winner 2026',
+          color: 'amber',
+          icon: 'Crown',
+        });
+      } else if (key === 'golden_boot' && !winner.nicknames.some((n) => n.title.includes('GOLDEN BOOT'))) {
+        winner.nicknames.unshift({
+          title: '👟 GOLDEN BOOT',
+          subtitle: `Top Goalscorer (${winner.goals || 0} Goals)`,
+          color: 'amber',
+          icon: 'Flame',
+        });
+      } else if (key === 'best_playmaker' && !winner.nicknames.some((n) => n.title.includes('BEST PLAYMAKER'))) {
+        winner.nicknames.unshift({
+          title: '🎯 BEST PLAYMAKER',
+          subtitle: `Assist King (${winner.assists || 0} Assists)`,
+          color: 'emerald',
+          icon: 'Award',
+        });
+      } else if (key === 'best_gk' && !winner.nicknames.some((n) => n.title.includes('BEST GOALKEEPER'))) {
+        winner.nicknames.unshift({
+          title: '🧤 BEST GOALKEEPER',
+          subtitle: 'Golden Glove Award Winner',
+          color: 'blue',
+          icon: 'Shield',
+        });
+      } else if (key === 'most_clean_sheets' && !winner.nicknames.some((n) => n.title.includes('MOST CLEAN SHEETS'))) {
+        winner.nicknames.unshift({
+          title: '🧱 MOST CLEAN SHEETS',
+          subtitle: `Tournament Defensive Wall (${winner.clean_sheets || 0} Clean Sheets)`,
+          color: 'emerald',
+          icon: 'Shield',
+        });
+      } else if (key === 'most_mvps' && !winner.nicknames.some((n) => n.title.includes('TOURNAMENT KINGPIN'))) {
+        winner.nicknames.unshift({
+          title: '⭐ TOURNAMENT KINGPIN',
+          subtitle: `Most MVP Awards (${winner.mvps || 0} MVPs)`,
+          color: 'purple',
+          icon: 'Star',
+        });
+      }
+    }
+
+    if (isRevealed && key === 'tott' && dataJson) {
+      const tottPlayerIds = new Set([
+        ...(dataJson.starters || []).map((p: any) => p.player_id),
+        ...(dataJson.substitutes || []).map((p: any) => p.player_id),
+      ]);
+      playersWithStats.forEach((p) => {
+        if (tottPlayerIds.has(p.id)) {
+          if (!p.nicknames) p.nicknames = [];
+          if (!p.nicknames.some((n) => n.title.includes('TEAM OF THE TOURNAMENT'))) {
+            p.nicknames.push({
+              title: '⭐ TEAM OF THE TOURNAMENT',
+              subtitle: 'Official Best 7 Selection',
+              color: 'emerald',
+              icon: 'Star',
+            });
+          }
+        }
+      });
+    }
+
+    // Public Privacy: Never leak unpublished winners, candidates or rankings
+    const publicWinner = (isRevealed || options?.isAdmin) ? winner : null;
+    const publicDataJson = (isRevealed || options?.isAdmin) ? dataJson : null;
+    const publicCandidates = options?.isAdmin ? candidates : [];
+    const publicTopCandidate = options?.isAdmin ? topCandidate : null;
+
+    awardItems.push({
+      award_key: key,
+      title: meta.title,
+      subtitle: meta.subtitle,
+      winner_player_id: options?.isAdmin ? (winner ? winner.id : null) : (isRevealed && winner ? winner.id : null),
+      winner: publicWinner,
+      selection_mode: selectionMode,
+      is_locked: isLocked,
+      is_revealed: isRevealed,
+      revealed_at: row.revealed_at || null,
+      status,
+      data_json: publicDataJson,
+      candidates: publicCandidates,
+      top_candidate: publicTopCandidate,
     });
   }
 
-  const awards = {
-    pot_revealed: potRevealed,
-    pot_revealed_at: settings.awards_pot_revealed_at || null,
-    pot_winner: (options?.isAdmin || potRevealed) ? potWinner : null,
-    pot_mode: potMode as any,
-    pot_locked: potLocked,
-    tott_revealed: tottRevealed,
-    tott_revealed_at: settings.awards_tott_revealed_at || null,
-    tott_data: (options?.isAdmin || tottRevealed) ? tottData : null,
+  const getAwardItem = (key: AwardKey) => awardItems.find((a) => a.award_key === key)!;
+  const potItem = getAwardItem('pot');
+  const tottItem = getAwardItem('tott');
+  const gbItem = getAwardItem('golden_boot');
+  const bpItem = getAwardItem('best_playmaker');
+  const bgkItem = getAwardItem('best_gk');
+  const mcsItem = getAwardItem('most_clean_sheets');
+  const mmvpItem = getAwardItem('most_mvps');
+
+  const awards: TournamentAwardsState = {
+    awards_list: awardItems,
+
+    pot_revealed: potItem.is_revealed,
+    pot_revealed_at: potItem.revealed_at,
+    pot_winner: potItem.winner,
+    pot_mode: potItem.selection_mode,
+    pot_locked: potItem.is_locked,
+
+    tott_revealed: tottItem.is_revealed,
+    tott_revealed_at: tottItem.revealed_at,
+    tott_data: tottItem.data_json,
+
+    golden_boot_revealed: gbItem.is_revealed,
+    golden_boot_winner: gbItem.winner,
+
+    best_playmaker_revealed: bpItem.is_revealed,
+    best_playmaker_winner: bpItem.winner,
+
+    best_gk_revealed: bgkItem.is_revealed,
+    best_gk_winner: bgkItem.winner,
+
+    most_clean_sheets_revealed: mcsItem.is_revealed,
+    most_clean_sheets_winner: mcsItem.winner,
+
+    most_mvps_revealed: mmvpItem.is_revealed,
+    most_mvps_winner: mmvpItem.winner,
+
+    weights: customWeights,
+    min_appearances: minAppearances,
   };
 
   return {
@@ -219,7 +433,9 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     top_scorers: topScorers,
     top_assists: topAssists,
     top_mvps: topMVPs,
-    player_of_tournament: (options?.isAdmin || potRevealed) ? playerOfTheTournament : [],
+    best_goalkeepers: bestGoalkeepers,
+    clean_sheets_leaderboard: cleanSheetsLeaderboard,
+    player_of_tournament: (options?.isAdmin || potItem.is_revealed) ? playerOfTheTournament : [],
     awards,
     yellow_cards: yellowCards,
     red_cards: redCards,
@@ -538,6 +754,162 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
 
 export function getActivityLogs(limit: number = 50): ActivityLog[] {
   return db.prepare('SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT ?').all(limit) as ActivityLog[];
+}
+
+export function designateTeamGoalkeeper(
+  teamId: number,
+  playerId: number | null,
+  adminUsername: string = 'MAHDIDHMN'
+) {
+  if (playerId) {
+    const player = db.prepare('SELECT id, name, team_id FROM players WHERE id = ?').get(playerId) as any;
+    if (!player || player.team_id !== teamId) {
+      throw new Error('Selected player does not belong to this team.');
+    }
+  }
+
+  const tx = db.transaction(() => {
+    // 1. Reset current GK on this team
+    db.prepare(`UPDATE players SET is_goalkeeper = 0 WHERE team_id = ?`).run(teamId);
+
+    // 2. Assign team goalkeeper_id
+    db.prepare(`UPDATE teams SET goalkeeper_id = ? WHERE id = ?`).run(playerId, teamId);
+
+    // 3. Mark the new GK
+    if (playerId) {
+      db.prepare(`UPDATE players SET is_goalkeeper = 1, position = 'Goalkeeper' WHERE id = ?`).run(playerId);
+    }
+  });
+
+  tx();
+  logActivity('DESIGNATE_GOALKEEPER', `Designated player #${playerId || 'None'} as goalkeeper for team #${teamId}`, adminUsername);
+  return { success: true };
+}
+
+export function updatePlayerPositions(
+  updates: { id: number; position: string; is_goalkeeper?: boolean }[],
+  adminUsername: string = 'MAHDIDHMN'
+) {
+  const updateStmt = db.prepare(`
+    UPDATE players
+    SET position = ?,
+        is_goalkeeper = CASE WHEN ? = 'Goalkeeper' OR ? = 1 THEN 1 ELSE 0 END
+    WHERE id = ?
+  `);
+
+  const tx = db.transaction(() => {
+    for (const u of updates) {
+      updateStmt.run(u.position, u.position, u.is_goalkeeper ? 1 : 0, u.id);
+    }
+  });
+
+  tx();
+  logActivity('UPDATE_POSITIONS', `Updated positions for ${updates.length} players`, adminUsername);
+  return { success: true };
+}
+
+export function updateAward(
+  awardKey: AwardKey,
+  params: {
+    winner_player_id?: number | null;
+    selection_mode?: 'auto' | 'manual';
+    is_locked?: boolean;
+    is_revealed?: boolean;
+    data_json?: any;
+  },
+  adminUsername: string = 'MAHDIDHMN'
+) {
+  const existing = db.prepare('SELECT * FROM tournament_awards WHERE award_key = ?').get(awardKey) as any;
+
+  const winner_player_id = params.winner_player_id !== undefined ? params.winner_player_id : existing?.winner_player_id;
+  const selection_mode = params.selection_mode !== undefined ? params.selection_mode : (existing?.selection_mode || 'auto');
+  const is_locked = params.is_locked !== undefined ? (params.is_locked ? 1 : 0) : (existing?.is_locked || 0);
+  const is_revealed = params.is_revealed !== undefined ? (params.is_revealed ? 1 : 0) : (existing?.is_revealed || 0);
+  const data_json = params.data_json !== undefined ? (params.data_json ? JSON.stringify(params.data_json) : null) : existing?.data_json;
+  const revealed_at = is_revealed ? (existing?.revealed_at || new Date().toISOString()) : null;
+
+  db.prepare(`
+    INSERT INTO tournament_awards (award_key, title, subtitle, winner_player_id, selection_mode, is_locked, is_revealed, revealed_at, data_json, updated_at)
+    VALUES (?, COALESCE(?, ?), ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(award_key) DO UPDATE SET
+      winner_player_id = excluded.winner_player_id,
+      selection_mode = excluded.selection_mode,
+      is_locked = excluded.is_locked,
+      is_revealed = excluded.is_revealed,
+      revealed_at = excluded.revealed_at,
+      data_json = excluded.data_json,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(
+    awardKey,
+    existing?.title || awardKey,
+    awardKey,
+    existing?.subtitle || null,
+    winner_player_id,
+    selection_mode,
+    is_locked,
+    is_revealed,
+    revealed_at,
+    data_json
+  );
+
+  // Sync with legacy settings keys for compatibility
+  const insertSetting = db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)');
+  if (awardKey === 'pot') {
+    insertSetting.run('awards_pot_mode', selection_mode);
+    insertSetting.run('awards_pot_locked', is_locked ? 'true' : 'false');
+    insertSetting.run('awards_pot_revealed', is_revealed ? 'true' : 'false');
+    if (winner_player_id) insertSetting.run('awards_pot_player_id', String(winner_player_id));
+    if (is_revealed && revealed_at) insertSetting.run('awards_pot_revealed_at', revealed_at);
+  } else if (awardKey === 'tott') {
+    insertSetting.run('awards_tott_revealed', is_revealed ? 'true' : 'false');
+    if (data_json) insertSetting.run('awards_tott_data', data_json);
+    if (is_revealed && revealed_at) insertSetting.run('awards_tott_revealed_at', revealed_at);
+  }
+
+  logActivity('UPDATE_AWARD', `Updated award ${awardKey} (revealed: ${Boolean(is_revealed)}, locked: ${Boolean(is_locked)})`, adminUsername);
+  return { success: true };
+}
+
+export function revealAllAwards(isRevealed: boolean, adminUsername: string = 'MAHDIDHMN') {
+  const revealedVal = isRevealed ? 1 : 0;
+  const now = isRevealed ? new Date().toISOString() : null;
+
+  db.prepare(`
+    UPDATE tournament_awards
+    SET is_revealed = ?,
+        revealed_at = ?,
+        updated_at = CURRENT_TIMESTAMP
+  `).run(revealedVal, now);
+
+  const insertSetting = db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)');
+  insertSetting.run('awards_pot_revealed', isRevealed ? 'true' : 'false');
+  insertSetting.run('awards_tott_revealed', isRevealed ? 'true' : 'false');
+  if (isRevealed && now) {
+    insertSetting.run('awards_pot_revealed_at', now);
+    insertSetting.run('awards_tott_revealed_at', now);
+  }
+
+  logActivity('REVEAL_ALL_AWARDS', `${isRevealed ? 'Revealed all' : 'Hidden all'} tournament awards together`, adminUsername);
+  return { success: true };
+}
+
+export function updateScoringWeights(
+  weights: Record<string, number>,
+  minAppearances: number = 3,
+  adminUsername: string = 'MAHDIDHMN'
+) {
+  const insertSetting = db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)');
+  if (weights.goal !== undefined) insertSetting.run('mvp_weight_goal', String(weights.goal));
+  if (weights.assist !== undefined) insertSetting.run('mvp_weight_assist', String(weights.assist));
+  if (weights.motm !== undefined) insertSetting.run('mvp_weight_motm', String(weights.motm));
+  if (weights.gk_clean_sheet !== undefined) insertSetting.run('mvp_weight_gk_clean_sheet', String(weights.gk_clean_sheet));
+  if (weights.def_clean_sheet !== undefined) insertSetting.run('mvp_weight_def_clean_sheet', String(weights.def_clean_sheet));
+  if (weights.yellow_card !== undefined) insertSetting.run('mvp_weight_yellow_card', String(weights.yellow_card));
+  if (weights.red_card !== undefined) insertSetting.run('mvp_weight_red_card', String(weights.red_card));
+  insertSetting.run('pot_min_appearances', String(minAppearances));
+
+  logActivity('UPDATE_WEIGHTS', `Updated tournament award scoring weights (min apps: ${minAppearances})`, adminUsername);
+  return { success: true };
 }
 
 export function updateAwardsSettings(

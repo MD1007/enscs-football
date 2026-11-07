@@ -22,8 +22,9 @@ export interface Player {
   team_id: number;
   team_name?: string;
   is_captain: boolean;
+  is_goalkeeper?: boolean;
   squad_number?: number | null;
-  position?: string | null;
+  position?: 'Goalkeeper' | 'Defender' | 'Midfielder' | 'Attacker' | string | null;
   created_at?: string;
   // Aggregated stats
   matches_played?: number;
@@ -32,6 +33,13 @@ export interface Player {
   yellow_cards?: number;
   red_cards?: number;
   mvps?: number;
+  clean_sheets?: number;
+  goals_conceded?: number;
+  matches_as_gk?: number;
+  clean_sheet_percentage?: number;
+  goals_conceded_per_match?: number;
+  goals_per_match?: number;
+  assists_per_match?: number;
   overall_points?: number;
   nicknames?: PlayerBadge[];
 }
@@ -45,6 +53,8 @@ export interface Team {
   logo_url?: string | null;
   captain_id?: number | null;
   captain_name?: string | null;
+  goalkeeper_id?: number | null;
+  goalkeeper_name?: string | null;
   players?: Player[];
   created_at?: string;
 }
@@ -176,17 +186,63 @@ export interface TeamOfTournamentData {
   substitutes: TeamOfTournamentPlayer[]; // exactly 2
 }
 
+export type AwardKey =
+  | 'pot'
+  | 'tott'
+  | 'golden_boot'
+  | 'best_playmaker'
+  | 'best_gk'
+  | 'most_clean_sheets'
+  | 'most_mvps';
+
+export type AwardStatus = 'not_started' | 'in_progress' | 'ready' | 'locked' | 'published';
+
+export interface AwardItem {
+  award_key: AwardKey;
+  title: string;
+  subtitle?: string | null;
+  winner_player_id?: number | null;
+  winner?: Player | null;
+  selection_mode: 'auto' | 'manual';
+  is_locked: boolean;
+  is_revealed: boolean;
+  revealed_at?: string | null;
+  status: AwardStatus;
+  data_json?: any;
+  candidates?: any[];
+  top_candidate?: any;
+}
+
 export interface TournamentAwardsState {
-  // Player of the Tournament
+  awards_list: AwardItem[];
+  // Individual reveal flags for quick consumption
   pot_revealed: boolean;
   pot_revealed_at?: string | null;
   pot_winner?: Player | null;
   pot_mode: 'auto' | 'manual';
   pot_locked: boolean;
-  // Team of the Tournament (7 players: 5 starters + 2 substitutes)
+
   tott_revealed: boolean;
   tott_revealed_at?: string | null;
   tott_data?: TeamOfTournamentData | null;
+
+  golden_boot_revealed: boolean;
+  golden_boot_winner?: Player | null;
+
+  best_playmaker_revealed: boolean;
+  best_playmaker_winner?: Player | null;
+
+  best_gk_revealed: boolean;
+  best_gk_winner?: Player | null;
+
+  most_clean_sheets_revealed: boolean;
+  most_clean_sheets_winner?: Player | null;
+
+  most_mvps_revealed: boolean;
+  most_mvps_winner?: Player | null;
+
+  weights: Record<string, number>;
+  min_appearances: number;
 }
 
 export interface TournamentData {
@@ -197,10 +253,12 @@ export interface TournamentData {
   settings: Record<string, string>;
   standings: Record<GroupId, StandingRow[]>;
   best_second: StandingRow[];
-  top_scorers: { player: Player; goals: number; rank: number }[];
-  top_assists: { player: Player; assists: number; rank: number }[];
-  top_mvps: { player: Player; mvps: number; rank: number }[];
-  player_of_tournament?: { player: Player; points: number; rank: number; goals: number; assists: number; mvps: number; appearances?: number }[];
+  top_scorers: { player: Player; goals: number; appearances: number; goals_per_match: number; rank: number }[];
+  top_assists: { player: Player; assists: number; appearances: number; assists_per_match: number; rank: number }[];
+  top_mvps: { player: Player; mvps: number; appearances: number; rank: number }[];
+  best_goalkeepers?: { player: Player; clean_sheets: number; goals_conceded: number; clean_sheet_percentage: number; appearances: number; rank: number; is_tied?: boolean }[];
+  clean_sheets_leaderboard?: { player: Player; clean_sheets: number; matches_as_gk: number; clean_sheet_percentage: number; rank: number; is_tied?: boolean }[];
+  player_of_tournament?: { player: Player; points: number; rank: number; goals: number; assists: number; mvps: number; appearances: number; is_eligible: boolean }[];
   awards?: TournamentAwardsState;
   yellow_cards: { player: Player; count: number; rank: number }[];
   red_cards: { player: Player; count: number; rank: number }[];

@@ -195,7 +195,9 @@ export function calculateBestSecondPlace(
 export function aggregatePlayerStats(
   players: Player[],
   teams: Team[],
-  matches: Match[]
+  matches: Match[],
+  customWeights?: Record<string, number>,
+  customMinAppearances: number = 3
 ) {
   const playerMap: Record<number, Player> = {};
   const teamMap: Record<number, Team> = {};
@@ -214,6 +216,9 @@ export function aggregatePlayerStats(
       yellow_cards: 0,
       red_cards: 0,
       mvps: 0,
+      clean_sheets: 0,
+      goals_conceded: 0,
+      matches_as_gk: 0,
       overall_points: 0,
       nicknames: [],
     };
@@ -224,8 +229,11 @@ export function aggregatePlayerStats(
 
   // Collect all events, appearances, and MVPs from matches
   for (const m of matches) {
-    // Count appearances for finished matches
     if (m.status === 'finished') {
+      const homeScore = m.home_score ?? 0;
+      const awayScore = m.away_score ?? 0;
+
+      // Count appearances for finished matches
       players.forEach((p) => {
         if (p.team_id === m.home_team_id || p.team_id === m.away_team_id) {
           if (playerMap[p.id]) {
@@ -233,6 +241,56 @@ export function aggregatePlayerStats(
           }
         }
       });
+
+      // 1. Identify Home Team Goalkeeper and Clean Sheet / Goals Conceded
+      const homeTeam = teamMap[m.home_team_id];
+      const homeGKId =
+        homeTeam?.goalkeeper_id ||
+        players.find((p) => p.team_id === m.home_team_id && (p.is_goalkeeper || p.position === 'Goalkeeper'))?.id;
+
+      if (homeGKId && playerMap[homeGKId]) {
+        playerMap[homeGKId].matches_as_gk = (playerMap[homeGKId].matches_as_gk || 0) + 1;
+        playerMap[homeGKId].goals_conceded = (playerMap[homeGKId].goals_conceded || 0) + awayScore;
+        if (awayScore === 0) {
+          playerMap[homeGKId].clean_sheets = (playerMap[homeGKId].clean_sheets || 0) + 1;
+        }
+      }
+
+      // Home Defenders Clean Sheet Contribution
+      if (awayScore === 0) {
+        players
+          .filter((p) => p.team_id === m.home_team_id && p.position === 'Defender')
+          .forEach((def) => {
+            if (playerMap[def.id]) {
+              playerMap[def.id].clean_sheets = (playerMap[def.id].clean_sheets || 0) + 1;
+            }
+          });
+      }
+
+      // 2. Identify Away Team Goalkeeper and Clean Sheet / Goals Conceded
+      const awayTeam = teamMap[m.away_team_id];
+      const awayGKId =
+        awayTeam?.goalkeeper_id ||
+        players.find((p) => p.team_id === m.away_team_id && (p.is_goalkeeper || p.position === 'Goalkeeper'))?.id;
+
+      if (awayGKId && playerMap[awayGKId]) {
+        playerMap[awayGKId].matches_as_gk = (playerMap[awayGKId].matches_as_gk || 0) + 1;
+        playerMap[awayGKId].goals_conceded = (playerMap[awayGKId].goals_conceded || 0) + homeScore;
+        if (homeScore === 0) {
+          playerMap[awayGKId].clean_sheets = (playerMap[awayGKId].clean_sheets || 0) + 1;
+        }
+      }
+
+      // Away Defenders Clean Sheet Contribution
+      if (homeScore === 0) {
+        players
+          .filter((p) => p.team_id === m.away_team_id && p.position === 'Defender')
+          .forEach((def) => {
+            if (playerMap[def.id]) {
+              playerMap[def.id].clean_sheets = (playerMap[def.id].clean_sheets || 0) + 1;
+            }
+          });
+      }
     }
 
     if (m.mvp_player_id && playerMap[m.mvp_player_id]) {
@@ -273,60 +331,151 @@ export function aggregatePlayerStats(
 
   const allPlayersWithStats = Object.values(playerMap);
 
-  // Calculate Overall Performance Points for each player:
-  // Goals (+5), Assists (+3), MVPs (+10), Appearances (+2), Yellow (-1), Red (-4)
+  // Scoring Weights Configuration
+  const weights = {
+    goal: customWeights?.goal ?? 4,
+    assist: customWeights?.assist ?? 3,
+    motm: customWeights?.motm ?? 3,
+    gk_clean_sheet: customWeights?.gk_clean_sheet ?? 4,
+    def_clean_sheet: customWeights?.def_clean_sheet ?? 2,
+    yellow_card: customWeights?.yellow_card ?? -1,
+    red_card: customWeights?.red_card ?? -3,
+  };
+
+  // Calculate Ratios and Overall Performance Points
   for (const p of allPlayersWithStats) {
+    p.goals_per_match = (p.matches_played || 0) > 0 ? Number(((p.goals || 0) / p.matches_played!).toFixed(2)) : 0;
+    p.assists_per_match = (p.matches_played || 0) > 0 ? Number(((p.assists || 0) / p.matches_played!).toFixed(2)) : 0;
+    p.clean_sheet_percentage = (p.matches_as_gk || 0) > 0 ? Number((((p.clean_sheets || 0) / p.matches_as_gk!) * 100).toFixed(1)) : 0;
+    p.goals_conceded_per_match = (p.matches_as_gk || 0) > 0 ? Number(((p.goals_conceded || 0) / p.matches_as_gk!).toFixed(2)) : 0;
+
+    const isGK = p.is_goalkeeper || p.position === 'Goalkeeper';
+    const isDEF = p.position === 'Defender';
+    const gkCleanSheetPoints = isGK ? (p.clean_sheets || 0) * weights.gk_clean_sheet : 0;
+    const defCleanSheetPoints = isDEF ? (p.clean_sheets || 0) * weights.def_clean_sheet : 0;
+
     p.overall_points = Math.max(
       0,
-      (p.goals || 0) * 5 +
-        (p.assists || 0) * 3 +
-        (p.mvps || 0) * 10 +
-        (p.matches_played || 0) * 2 -
-        (p.yellow_cards || 0) * 1 -
-        (p.red_cards || 0) * 4
+      (p.goals || 0) * weights.goal +
+        (p.assists || 0) * weights.assist +
+        (p.mvps || 0) * weights.motm +
+        gkCleanSheetPoints +
+        defCleanSheetPoints +
+        (p.matches_played || 0) * 1 +
+        (p.yellow_cards || 0) * weights.yellow_card +
+        (p.red_cards || 0) * weights.red_card
     );
   }
 
-  // Top scorers (goals > 0, excluding own goals)
+  // 1. Golden Boot: Top scorers (goals > 0, excluding own goals)
   const topScorers = allPlayersWithStats
     .filter((p) => (p.goals || 0) > 0)
-    .sort((a, b) => (b.goals || 0) - (a.goals || 0) || a.name.localeCompare(b.name))
+    .sort((a, b) => (b.goals || 0) - (a.goals || 0) || (b.goals_per_match || 0) - (a.goals_per_match || 0) || a.name.localeCompare(b.name))
     .map((player, idx) => ({
       player,
       goals: player.goals || 0,
+      appearances: player.matches_played || 0,
+      goals_per_match: player.goals_per_match || 0,
       rank: idx + 1,
     }));
 
-  // Top assists (assists > 0)
+  // 2. Best Playmaker: Top assists (assists > 0)
   const topAssists = allPlayersWithStats
     .filter((p) => (p.assists || 0) > 0)
-    .sort((a, b) => (b.assists || 0) - (a.assists || 0) || a.name.localeCompare(b.name))
+    .sort((a, b) => (b.assists || 0) - (a.assists || 0) || (b.assists_per_match || 0) - (a.assists_per_match || 0) || a.name.localeCompare(b.name))
     .map((player, idx) => ({
       player,
       assists: player.assists || 0,
+      appearances: player.matches_played || 0,
+      assists_per_match: player.assists_per_match || 0,
       rank: idx + 1,
     }));
 
-  // Top MVPs (mvps > 0)
+  // 3. Most Man of the Match (MVPs)
   const topMVPs = allPlayersWithStats
     .filter((p) => (p.mvps || 0) > 0)
-    .sort((a, b) => (b.mvps || 0) - (a.mvps || 0) || a.name.localeCompare(b.name))
+    .sort((a, b) => (b.mvps || 0) - (a.mvps || 0) || (a.matches_played || 0) - (b.matches_played || 0) || a.name.localeCompare(b.name))
     .map((player, idx) => ({
       player,
       mvps: player.mvps || 0,
+      appearances: player.matches_played || 0,
       rank: idx + 1,
     }));
 
-  // Player of the Tournament (Overall Index)
+  // 4. Best Goalkeeper Ranking
+  const allGoalkeepers = allPlayersWithStats.filter(
+    (p) => p.is_goalkeeper || p.position === 'Goalkeeper' || (p.matches_as_gk || 0) > 0
+  );
+
+  const bestGoalkeepers = allGoalkeepers
+    .sort((a, b) => {
+      // 1. Clean sheets
+      if ((b.clean_sheets || 0) !== (a.clean_sheets || 0)) return (b.clean_sheets || 0) - (a.clean_sheets || 0);
+      // 2. Clean sheet percentage
+      if ((b.clean_sheet_percentage || 0) !== (a.clean_sheet_percentage || 0)) return (b.clean_sheet_percentage || 0) - (a.clean_sheet_percentage || 0);
+      // 3. Goals conceded per match (lower is better)
+      if ((a.goals_conceded_per_match || 0) !== (b.goals_conceded_per_match || 0)) return (a.goals_conceded_per_match || 0) - (b.goals_conceded_per_match || 0);
+      return (b.matches_as_gk || 0) - (a.matches_as_gk || 0);
+    })
+    .map((player, idx, arr) => {
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const next = idx < arr.length - 1 ? arr[idx + 1] : null;
+      const is_tied = Boolean(
+        (prev && prev.clean_sheets === player.clean_sheets && prev.goals_conceded === player.goals_conceded) ||
+        (next && next.clean_sheets === player.clean_sheets && next.goals_conceded === player.goals_conceded)
+      );
+
+      return {
+        player,
+        clean_sheets: player.clean_sheets || 0,
+        goals_conceded: player.goals_conceded || 0,
+        clean_sheet_percentage: player.clean_sheet_percentage || 0,
+        appearances: player.matches_as_gk || player.matches_played || 0,
+        rank: idx + 1,
+        is_tied,
+      };
+    });
+
+  // 5. Most Clean Sheets Ranking
+  const cleanSheetsLeaderboard = [...allGoalkeepers]
+    .sort((a, b) => {
+      if ((b.clean_sheets || 0) !== (a.clean_sheets || 0)) return (b.clean_sheets || 0) - (a.clean_sheets || 0);
+      if ((b.clean_sheet_percentage || 0) !== (a.clean_sheet_percentage || 0)) return (b.clean_sheet_percentage || 0) - (a.clean_sheet_percentage || 0);
+      return (b.matches_as_gk || 0) - (a.matches_as_gk || 0);
+    })
+    .map((player, idx, arr) => {
+      const prev = idx > 0 ? arr[idx - 1] : null;
+      const next = idx < arr.length - 1 ? arr[idx + 1] : null;
+      const is_tied = Boolean(
+        (prev && prev.clean_sheets === player.clean_sheets) ||
+        (next && next.clean_sheets === player.clean_sheets)
+      );
+
+      return {
+        player,
+        clean_sheets: player.clean_sheets || 0,
+        matches_as_gk: player.matches_as_gk || player.matches_played || 0,
+        clean_sheet_percentage: player.clean_sheet_percentage || 0,
+        rank: idx + 1,
+        is_tied,
+      };
+    });
+
+  // 6. Player of the Tournament (with min 3 appearances eligibility check)
+  const minApps = customMinAppearances;
   const playerOfTheTournament = allPlayersWithStats
     .filter((p) => (p.overall_points || 0) > 0 || (p.mvps || 0) > 0 || (p.goals || 0) > 0)
-    .sort(
-      (a, b) =>
-        (b.overall_points || 0) - (a.overall_points || 0) ||
-        (b.mvps || 0) - (a.mvps || 0) ||
-        (b.goals || 0) - (a.goals || 0) ||
-        a.name.localeCompare(b.name)
-    )
+    .sort((a, b) => {
+      const aEligible = (a.matches_played || 0) >= minApps;
+      const bEligible = (b.matches_played || 0) >= minApps;
+      if (aEligible !== bEligible) return aEligible ? -1 : 1;
+      if ((b.overall_points || 0) !== (a.overall_points || 0)) {
+        return (b.overall_points || 0) - (a.overall_points || 0);
+      }
+      if ((b.mvps || 0) !== (a.mvps || 0)) return (b.mvps || 0) - (a.mvps || 0);
+      if ((b.goals || 0) !== (a.goals || 0)) return (b.goals || 0) - (a.goals || 0);
+      return a.name.localeCompare(b.name);
+    })
     .map((player, idx) => ({
       player,
       points: player.overall_points || 0,
@@ -335,6 +484,7 @@ export function aggregatePlayerStats(
       assists: player.assists || 0,
       mvps: player.mvps || 0,
       appearances: player.matches_played || 0,
+      is_eligible: (player.matches_played || 0) >= minApps,
     }));
 
   // Assign Hyping Nicknames
@@ -411,6 +561,8 @@ export function aggregatePlayerStats(
     topScorers,
     topAssists,
     topMVPs,
+    bestGoalkeepers,
+    cleanSheetsLeaderboard,
     playerOfTheTournament,
     yellowCards,
     redCards,
@@ -613,7 +765,7 @@ export function getFormationSlots(formation = '1-2-1') {
 }
 
 /**
- * Suggests the 7 players (5 starting + 2 substitutes) based on tournament performance
+ * Suggests the 7 players (5 starting + 2 substitutes) based on tournament performance and positions
  */
 export function suggestTeamOfTournament(players: Player[], formation = '1-2-1'): TeamOfTournamentData {
   const sorted = [...players].sort((a, b) => (b.overall_points || 0) - (a.overall_points || 0));
@@ -624,7 +776,25 @@ export function suggestTeamOfTournament(players: Player[], formation = '1-2-1'):
 
   for (let i = 0; i < slots.length; i++) {
     const slot = slots[i];
-    const candidate = sorted.find((p) => !usedIds.has(p.id)) || sorted[0];
+    let candidate: Player | undefined;
+
+    if (slot.position_label === 'GK') {
+      candidate = sorted.find(
+        (p) => !usedIds.has(p.id) && (p.is_goalkeeper || p.position === 'Goalkeeper' || (p.matches_as_gk || 0) > 0)
+      );
+    } else if (slot.position_label === 'DEF') {
+      candidate = sorted.find((p) => !usedIds.has(p.id) && p.position === 'Defender');
+    } else if (slot.position_label === 'MID') {
+      candidate = sorted.find((p) => !usedIds.has(p.id) && p.position === 'Midfielder');
+    } else if (slot.position_label === 'FWD') {
+      candidate = sorted.find((p) => !usedIds.has(p.id) && p.position === 'Attacker');
+    }
+
+    // Fallback to highest ranked available player
+    if (!candidate) {
+      candidate = sorted.find((p) => !usedIds.has(p.id)) || sorted[0];
+    }
+
     if (candidate) {
       usedIds.add(candidate.id);
       starters.push({

@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getAdminFromRequest } from '@/lib/auth';
-import { getFullTournamentData, updateAwardsSettings } from '@/lib/tournamentService';
+import {
+  getFullTournamentData,
+  updateAwardsSettings,
+  updateAward,
+  revealAllAwards,
+  updateScoringWeights,
+} from '@/lib/tournamentService';
 import { suggestTeamOfTournament } from '@/lib/calculations';
+import { AwardKey } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +30,11 @@ export async function GET(request: Request) {
     return NextResponse.json({
       awards: data.awards,
       player_of_tournament: data.player_of_tournament,
+      best_goalkeepers: data.best_goalkeepers || [],
+      clean_sheets_leaderboard: data.clean_sheets_leaderboard || [],
+      top_scorers: data.top_scorers || [],
+      top_assists: data.top_assists || [],
+      top_mvps: data.top_mvps || [],
       players: data.players,
       teams: data.teams,
       suggestions,
@@ -41,26 +53,53 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const {
-      pot_mode,
-      pot_player_id,
-      pot_locked,
-      pot_revealed,
-      tott_revealed,
-      tott_data,
-    } = body;
+    const { action } = body;
 
-    updateAwardsSettings(
-      {
+    if (action === 'reveal_all') {
+      const isRevealed = Boolean(body.is_revealed);
+      revealAllAwards(isRevealed, admin.username);
+    } else if (action === 'update_weights') {
+      const { weights, min_appearances } = body;
+      updateScoringWeights(weights || {}, min_appearances || 3, admin.username);
+    } else if (action === 'update_award') {
+      const { award_key, winner_player_id, selection_mode, is_locked, is_revealed, data_json } = body;
+      if (!award_key) {
+        return NextResponse.json({ error: 'award_key is required' }, { status: 400 });
+      }
+      updateAward(
+        award_key as AwardKey,
+        {
+          winner_player_id,
+          selection_mode,
+          is_locked,
+          is_revealed,
+          data_json,
+        },
+        admin.username
+      );
+    } else {
+      // Legacy compatibility handler
+      const {
         pot_mode,
         pot_player_id,
         pot_locked,
         pot_revealed,
         tott_revealed,
         tott_data,
-      },
-      admin.username
-    );
+      } = body;
+
+      updateAwardsSettings(
+        {
+          pot_mode,
+          pot_player_id,
+          pot_locked,
+          pot_revealed,
+          tott_revealed,
+          tott_data,
+        },
+        admin.username
+      );
+    }
 
     const updated = getFullTournamentData({ isAdmin: true });
     return NextResponse.json({
@@ -74,3 +113,4 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error.message || 'Failed to update awards' }, { status: 500 });
   }
 }
+
