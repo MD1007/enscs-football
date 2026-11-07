@@ -1338,7 +1338,7 @@ export default function AdminAwardsPage() {
                       {p.name}
                     </span>
                     <span className="text-[11px] text-slate-400" dir="auto">
-                      {p.team_name} • {p.position || 'Player'}
+                      {p.team_name} • {p.is_goalkeeper ? '🧤 Goalkeeper' : 'Player'}
                     </span>
                   </div>
 

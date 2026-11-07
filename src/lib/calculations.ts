@@ -780,17 +780,11 @@ export function suggestTeamOfTournament(players: Player[], formation = '1-2-1'):
 
     if (slot.position_label === 'GK') {
       candidate = sorted.find(
-        (p) => !usedIds.has(p.id) && (p.is_goalkeeper || p.position === 'Goalkeeper' || (p.matches_as_gk || 0) > 0)
+        (p) => !usedIds.has(p.id) && (p.is_goalkeeper || (p.matches_as_gk || 0) > 0)
       );
-    } else if (slot.position_label === 'DEF') {
-      candidate = sorted.find((p) => !usedIds.has(p.id) && p.position === 'Defender');
-    } else if (slot.position_label === 'MID') {
-      candidate = sorted.find((p) => !usedIds.has(p.id) && p.position === 'Midfielder');
-    } else if (slot.position_label === 'FWD') {
-      candidate = sorted.find((p) => !usedIds.has(p.id) && p.position === 'Attacker');
     }
 
-    // Fallback to highest ranked available player
+    // Outfield players: choose top performing players
     if (!candidate) {
       candidate = sorted.find((p) => !usedIds.has(p.id)) || sorted[0];
     }

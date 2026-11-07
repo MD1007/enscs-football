@@ -31,7 +31,6 @@ export default function AdminTeamsPage() {
   const [color, setColor] = useState('#10B981');
   const [captainId, setCaptainId] = useState<string>('');
   const [goalkeeperId, setGoalkeeperId] = useState<string>('');
-  const [playerPositions, setPlayerPositions] = useState<Record<number, string>>({});
 
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -58,7 +57,6 @@ export default function AdminTeamsPage() {
     setColor('#10B981');
     setCaptainId('');
     setGoalkeeperId('');
-    setPlayerPositions({});
     setModalOpen(true);
     setFeedback(null);
   };
@@ -71,46 +69,8 @@ export default function AdminTeamsPage() {
     setColor(t.color || '#3B82F6');
     setCaptainId(t.captain_id ? t.captain_id.toString() : '');
     setGoalkeeperId(t.goalkeeper_id ? t.goalkeeper_id.toString() : '');
-
-    const teamMembers = players.filter((p) => p.team_id === t.id);
-    const posMap: Record<number, string> = {};
-    for (const p of teamMembers) {
-      posMap[p.id] = p.position || (p.id === t.goalkeeper_id ? 'Goalkeeper' : 'Attacker');
-    }
-    setPlayerPositions(posMap);
     setModalOpen(true);
     setFeedback(null);
-  };
-
-  const handleGoalkeeperChange = (newGkId: string) => {
-    setGoalkeeperId(newGkId);
-    if (newGkId) {
-      const numericGkId = parseInt(newGkId);
-      setPlayerPositions((prev) => {
-        const next = { ...prev };
-        // Reset previous GK to Defender if needed
-        for (const pid of Object.keys(next)) {
-          const numId = Number(pid);
-          if (numId !== numericGkId && next[numId] === 'Goalkeeper') {
-            next[numId] = 'Defender';
-          }
-        }
-        next[numericGkId] = 'Goalkeeper';
-        return next;
-      });
-    }
-  };
-
-  const handlePositionChange = (playerId: number, pos: string) => {
-    setPlayerPositions((prev) => ({
-      ...prev,
-      [playerId]: pos,
-    }));
-    if (pos === 'Goalkeeper') {
-      setGoalkeeperId(playerId.toString());
-    } else if (goalkeeperId === playerId.toString()) {
-      setGoalkeeperId('');
-    }
   };
 
   const handleSaveTeam = async (e: React.FormEvent) => {
@@ -134,11 +94,6 @@ export default function AdminTeamsPage() {
 
       if (isEdit) {
         payload.goalkeeper_id = goalkeeperId ? parseInt(goalkeeperId) : null;
-        payload.player_positions = Object.entries(playerPositions).map(([pid, pos]) => ({
-          id: parseInt(pid),
-          position: pos,
-          is_goalkeeper: pos === 'Goalkeeper',
-        }));
       }
 
       const res = await fetch(url, {
@@ -184,10 +139,10 @@ export default function AdminTeamsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Rosters & Positions</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Rosters & Goalkeepers</span>
           <h1 className="text-3xl font-black text-white uppercase tracking-tight">Team Management</h1>
           <p className="text-sm text-slate-400">
-            Create and edit clubs, designate official goalkeepers, configure team captains, and assign player pitch positions.
+            Create and edit clubs, designate official goalkeepers, and configure team captains.
           </p>
         </div>
 
@@ -421,7 +376,7 @@ export default function AdminTeamsPage() {
 
                   <select
                     value={goalkeeperId}
-                    onChange={(e) => handleGoalkeeperChange(e.target.value)}
+                    onChange={(e) => setGoalkeeperId(e.target.value)}
                     className="w-full bg-pitch-darkest border border-blue-500/40 rounded-xl p-2.5 text-xs text-blue-200 focus:outline-none focus:border-blue-400 font-bold"
                   >
                     <option value="">No designated goalkeeper</option>
@@ -434,79 +389,7 @@ export default function AdminTeamsPage() {
                 </div>
               )}
 
-              {/* SECTION: PLAYER POSITIONS & ROSTER */}
-              {editingTeam && (
-                <div className="space-y-3 pt-2 border-t border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                        Squad Roster & Positions ({teamPlayers.length} / 7)
-                      </h4>
-                      <p className="text-[11px] text-slate-400">
-                        Assign pitch roles: Goalkeeper (GK), Defender, Midfielder, or Attacker.
-                      </p>
-                    </div>
-                  </div>
 
-                  {teamPlayers.length === 0 ? (
-                    <p className="text-xs text-slate-500 italic p-3 bg-white/5 rounded-xl">
-                      No players registered yet for this team.
-                    </p>
-                  ) : (
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                      {teamPlayers.map((p) => {
-                        const currentPos = playerPositions[p.id] || p.position || 'Attacker';
-                        const isGK = currentPos === 'Goalkeeper' || goalkeeperId === p.id.toString();
-
-                        return (
-                          <div
-                            key={p.id}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                              isGK
-                                ? 'bg-blue-950/25 border-blue-500/40'
-                                : 'bg-pitch-card border-pitch-border'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-2 truncate">
-                              <span className="font-mono text-slate-400 text-[10px] w-5 text-center">
-                                {p.squad_number ? `#${p.squad_number}` : '-'}
-                              </span>
-                              <span className="font-semibold text-white truncate" dir="auto">
-                                {p.name}
-                              </span>
-                              {p.id.toString() === captainId && (
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
-                                  CAP
-                                </span>
-                              )}
-                              {isGK && (
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                  GK
-                                </span>
-                              )}
-                            </div>
-
-                            <select
-                              value={currentPos}
-                              onChange={(e) => handlePositionChange(p.id, e.target.value)}
-                              className={`rounded-lg px-2 py-1 text-xs font-bold border focus:outline-none ${
-                                isGK
-                                  ? 'bg-blue-900/60 border-blue-500 text-blue-200'
-                                  : 'bg-pitch-darkest border-pitch-border text-slate-300'
-                              }`}
-                            >
-                              <option value="Goalkeeper">Goalkeeper (GK)</option>
-                              <option value="Defender">Defender</option>
-                              <option value="Midfielder">Midfielder</option>
-                              <option value="Attacker">Attacker</option>
-                            </select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
 
               <div className="flex items-center justify-end space-x-3 pt-4 border-t border-white/10">
                 <button
