@@ -301,9 +301,13 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
                   >
                     <div className="flex items-center space-x-2">
                       <span className="font-mono text-slate-500 text-[10px] w-4">{idx + 1}.</span>
-                      <span className="font-semibold text-white" dir="auto">
+                      <Link
+                        href={`/players/${p.id}`}
+                        className="font-semibold text-white hover:text-emerald-400 transition hover:underline"
+                        dir="auto"
+                      >
                         {p.name}
-                      </span>
+                      </Link>
                       {p.is_captain && (
                         <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
                           (C)
@@ -350,9 +354,13 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
                   >
                     <div className="flex items-center space-x-2">
                       <span className="font-mono text-slate-500 text-[10px] w-4">{idx + 1}.</span>
-                      <span className="font-semibold text-white" dir="auto">
+                      <Link
+                        href={`/players/${p.id}`}
+                        className="font-semibold text-white hover:text-emerald-400 transition hover:underline"
+                        dir="auto"
+                      >
                         {p.name}
-                      </span>
+                      </Link>
                       {p.is_captain && (
                         <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
                           (C)

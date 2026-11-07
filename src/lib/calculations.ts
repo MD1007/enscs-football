@@ -1,4 +1,4 @@
-import { Team, Player, Match, GroupId, StandingRow, MatchEvent } from './types';
+import { Team, Player, Match, GroupId, StandingRow, MatchEvent, TeamOfTournamentData, TeamOfTournamentPlayer } from './types';
 
 /**
  * Calculates standings for a group according to official tournament rules:
@@ -210,6 +210,7 @@ export function aggregatePlayerStats(
       team_name: teamMap[p.team_id]?.name || 'Unknown',
       goals: 0,
       assists: 0,
+      matches_played: 0,
       yellow_cards: 0,
       red_cards: 0,
       mvps: 0,
@@ -221,8 +222,19 @@ export function aggregatePlayerStats(
   // Track assists to avoid double-counting between linked events
   const countedAssists = new Set<string>();
 
-  // Collect all events and MVPs from matches
+  // Collect all events, appearances, and MVPs from matches
   for (const m of matches) {
+    // Count appearances for finished matches
+    if (m.status === 'finished') {
+      players.forEach((p) => {
+        if (p.team_id === m.home_team_id || p.team_id === m.away_team_id) {
+          if (playerMap[p.id]) {
+            playerMap[p.id].matches_played = (playerMap[p.id].matches_played || 0) + 1;
+          }
+        }
+      });
+    }
+
     if (m.mvp_player_id && playerMap[m.mvp_player_id]) {
       playerMap[m.mvp_player_id].mvps = (playerMap[m.mvp_player_id].mvps || 0) + 1;
     }
@@ -262,13 +274,14 @@ export function aggregatePlayerStats(
   const allPlayersWithStats = Object.values(playerMap);
 
   // Calculate Overall Performance Points for each player:
-  // Goals (+5), Assists (+3), MVPs (+10), Yellow (-1), Red (-4)
+  // Goals (+5), Assists (+3), MVPs (+10), Appearances (+2), Yellow (-1), Red (-4)
   for (const p of allPlayersWithStats) {
     p.overall_points = Math.max(
       0,
       (p.goals || 0) * 5 +
         (p.assists || 0) * 3 +
-        (p.mvps || 0) * 10 -
+        (p.mvps || 0) * 10 +
+        (p.matches_played || 0) * 2 -
         (p.yellow_cards || 0) * 1 -
         (p.red_cards || 0) * 4
     );
@@ -321,6 +334,7 @@ export function aggregatePlayerStats(
       goals: player.goals || 0,
       assists: player.assists || 0,
       mvps: player.mvps || 0,
+      appearances: player.matches_played || 0,
     }));
 
   // Assign Hyping Nicknames
@@ -555,5 +569,114 @@ export function isGroupStageComplete(matches: Match[]): boolean {
   const groupMatches = matches.filter((m) => m.stage === 'group');
   if (groupMatches.length === 0) return false;
   return groupMatches.every((m) => m.status === 'finished');
+}
+
+/**
+ * Returns the 5 starter coordinate slots for 5-a-side pitch formations
+ */
+export function getFormationSlots(formation = '1-2-1') {
+  switch (formation) {
+    case '2-2':
+      return [
+        { slot_id: 'gk', slot_type: 'starter' as const, position_label: 'GK', pitch_x: 50, pitch_y: 86 },
+        { slot_id: 'def_1', slot_type: 'starter' as const, position_label: 'DEF', pitch_x: 28, pitch_y: 62 },
+        { slot_id: 'def_2', slot_type: 'starter' as const, position_label: 'DEF', pitch_x: 72, pitch_y: 62 },
+        { slot_id: 'fwd_1', slot_type: 'starter' as const, position_label: 'FWD', pitch_x: 28, pitch_y: 24 },
+        { slot_id: 'fwd_2', slot_type: 'starter' as const, position_label: 'FWD', pitch_x: 72, pitch_y: 24 },
+      ];
+    case '1-1-2':
+      return [
+        { slot_id: 'gk', slot_type: 'starter' as const, position_label: 'GK', pitch_x: 50, pitch_y: 86 },
+        { slot_id: 'def_1', slot_type: 'starter' as const, position_label: 'DEF', pitch_x: 50, pitch_y: 66 },
+        { slot_id: 'mid_1', slot_type: 'starter' as const, position_label: 'MID', pitch_x: 50, pitch_y: 44 },
+        { slot_id: 'fwd_1', slot_type: 'starter' as const, position_label: 'FWD', pitch_x: 28, pitch_y: 22 },
+        { slot_id: 'fwd_2', slot_type: 'starter' as const, position_label: 'FWD', pitch_x: 72, pitch_y: 22 },
+      ];
+    case '2-1-1':
+      return [
+        { slot_id: 'gk', slot_type: 'starter' as const, position_label: 'GK', pitch_x: 50, pitch_y: 86 },
+        { slot_id: 'def_1', slot_type: 'starter' as const, position_label: 'DEF', pitch_x: 28, pitch_y: 64 },
+        { slot_id: 'def_2', slot_type: 'starter' as const, position_label: 'DEF', pitch_x: 72, pitch_y: 64 },
+        { slot_id: 'mid_1', slot_type: 'starter' as const, position_label: 'MID', pitch_x: 50, pitch_y: 42 },
+        { slot_id: 'fwd_1', slot_type: 'starter' as const, position_label: 'FWD', pitch_x: 50, pitch_y: 20 },
+      ];
+    case '1-2-1':
+    default:
+      return [
+        { slot_id: 'gk', slot_type: 'starter' as const, position_label: 'GK', pitch_x: 50, pitch_y: 86 },
+        { slot_id: 'def_1', slot_type: 'starter' as const, position_label: 'DEF', pitch_x: 50, pitch_y: 65 },
+        { slot_id: 'mid_1', slot_type: 'starter' as const, position_label: 'MID', pitch_x: 22, pitch_y: 44 },
+        { slot_id: 'mid_2', slot_type: 'starter' as const, position_label: 'MID', pitch_x: 78, pitch_y: 44 },
+        { slot_id: 'fwd_1', slot_type: 'starter' as const, position_label: 'FWD', pitch_x: 50, pitch_y: 20 },
+      ];
+  }
+}
+
+/**
+ * Suggests the 7 players (5 starting + 2 substitutes) based on tournament performance
+ */
+export function suggestTeamOfTournament(players: Player[], formation = '1-2-1'): TeamOfTournamentData {
+  const sorted = [...players].sort((a, b) => (b.overall_points || 0) - (a.overall_points || 0));
+  const slots = getFormationSlots(formation);
+  const usedIds = new Set<number>();
+
+  const starters: TeamOfTournamentPlayer[] = [];
+
+  for (let i = 0; i < slots.length; i++) {
+    const slot = slots[i];
+    const candidate = sorted.find((p) => !usedIds.has(p.id)) || sorted[0];
+    if (candidate) {
+      usedIds.add(candidate.id);
+      starters.push({
+        slot_id: slot.slot_id,
+        slot_type: 'starter',
+        position_label: slot.position_label,
+        pitch_x: slot.pitch_x,
+        pitch_y: slot.pitch_y,
+        player_id: candidate.id,
+        player_name: candidate.name,
+        player_team_id: candidate.team_id,
+        player_team_name: candidate.team_name || 'Team',
+        goals: candidate.goals || 0,
+        assists: candidate.assists || 0,
+        mvps: candidate.mvps || 0,
+        points: candidate.overall_points || 0,
+      });
+    }
+  }
+
+  const substitutes: TeamOfTournamentPlayer[] = [];
+  const subSlots = [
+    { slot_id: 'sub_1', position_label: 'SUB 1' },
+    { slot_id: 'sub_2', position_label: 'SUB 2' },
+  ];
+
+  for (const s of subSlots) {
+    const candidate = sorted.find((p) => !usedIds.has(p.id)) || sorted[0];
+    if (candidate) {
+      usedIds.add(candidate.id);
+      substitutes.push({
+        slot_id: s.slot_id,
+        slot_type: 'substitute',
+        position_label: s.position_label,
+        pitch_x: 0,
+        pitch_y: 0,
+        player_id: candidate.id,
+        player_name: candidate.name,
+        player_team_id: candidate.team_id,
+        player_team_name: candidate.team_name || 'Team',
+        goals: candidate.goals || 0,
+        assists: candidate.assists || 0,
+        mvps: candidate.mvps || 0,
+        points: candidate.overall_points || 0,
+      });
+    }
+  }
+
+  return {
+    formation,
+    starters,
+    substitutes,
+  };
 }
 

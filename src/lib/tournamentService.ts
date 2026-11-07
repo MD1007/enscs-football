@@ -21,7 +21,7 @@ import {
 // Ensure database is initialized
 initDatabase();
 
-export function getFullTournamentData(): TournamentData {
+export function getFullTournamentData(options?: { isAdmin?: boolean }): TournamentData {
   // 1. Teams
   const teamsRaw = db.prepare(`
     SELECT t.*, p.name as captain_name
@@ -140,6 +140,74 @@ export function getFullTournamentData(): TournamentData {
 
   const nextMatch = upcomingMatches.length > 0 ? upcomingMatches[0] : null;
 
+  // 8. Awards & Public Reveal Verification
+  const potRevealed = settings.awards_pot_revealed === 'true';
+  const tottRevealed = settings.awards_tott_revealed === 'true';
+  const potMode = settings.awards_pot_mode || 'auto';
+  const potLocked = settings.awards_pot_locked === 'true';
+  const potPlayerId = settings.awards_pot_player_id ? Number(settings.awards_pot_player_id) : null;
+
+  let potWinner: Player | null = null;
+  if (potMode === 'manual' && potPlayerId) {
+    potWinner = playersWithStats.find((p) => p.id === potPlayerId) || null;
+  } else if (playerOfTheTournament.length > 0) {
+    potWinner = playerOfTheTournament[0].player;
+  }
+
+  let tottData: any = null;
+  if (settings.awards_tott_data) {
+    try {
+      tottData = JSON.parse(settings.awards_tott_data);
+    } catch (e) {
+      tottData = null;
+    }
+  }
+
+  // If revealed, add prestige badges to the winning players
+  if (potRevealed && potWinner) {
+    if (!potWinner.nicknames) potWinner.nicknames = [];
+    if (!potWinner.nicknames.some((n) => n.title.includes('PLAYER OF THE TOURNAMENT'))) {
+      potWinner.nicknames.unshift({
+        title: '👑 PLAYER OF THE TOURNAMENT',
+        subtitle: 'Official Golden Ball Winner 2026',
+        color: 'amber',
+        icon: 'Crown',
+      });
+    }
+  }
+
+  if (tottRevealed && tottData) {
+    const tottPlayerIds = new Set([
+      ...(tottData.starters || []).map((p: any) => p.player_id),
+      ...(tottData.substitutes || []).map((p: any) => p.player_id),
+    ]);
+
+    playersWithStats.forEach((p) => {
+      if (tottPlayerIds.has(p.id)) {
+        if (!p.nicknames) p.nicknames = [];
+        if (!p.nicknames.some((n) => n.title.includes('TEAM OF THE TOURNAMENT'))) {
+          p.nicknames.push({
+            title: '⭐ TEAM OF THE TOURNAMENT',
+            subtitle: 'Official Best 7 Selection',
+            color: 'emerald',
+            icon: 'Star',
+          });
+        }
+      }
+    });
+  }
+
+  const awards = {
+    pot_revealed: potRevealed,
+    pot_revealed_at: settings.awards_pot_revealed_at || null,
+    pot_winner: (options?.isAdmin || potRevealed) ? potWinner : null,
+    pot_mode: potMode as any,
+    pot_locked: potLocked,
+    tott_revealed: tottRevealed,
+    tott_revealed_at: settings.awards_tott_revealed_at || null,
+    tott_data: (options?.isAdmin || tottRevealed) ? tottData : null,
+  };
+
   return {
     teams,
     players: playersWithStats,
@@ -151,7 +219,8 @@ export function getFullTournamentData(): TournamentData {
     top_scorers: topScorers,
     top_assists: topAssists,
     top_mvps: topMVPs,
-    player_of_tournament: playerOfTheTournament,
+    player_of_tournament: (options?.isAdmin || potRevealed) ? playerOfTheTournament : [],
+    awards,
     yellow_cards: yellowCards,
     red_cards: redCards,
     summary: {
@@ -469,5 +538,47 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
 
 export function getActivityLogs(limit: number = 50): ActivityLog[] {
   return db.prepare('SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT ?').all(limit) as ActivityLog[];
+}
+
+export function updateAwardsSettings(
+  params: {
+    pot_mode?: 'auto' | 'manual';
+    pot_player_id?: number | null;
+    pot_locked?: boolean;
+    pot_revealed?: boolean;
+    tott_revealed?: boolean;
+    tott_data?: any;
+  },
+  adminUsername: string = 'MAHDIDHMN'
+) {
+  const insertSetting = db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)');
+
+  if (params.pot_mode !== undefined) {
+    insertSetting.run('awards_pot_mode', params.pot_mode);
+  }
+  if (params.pot_player_id !== undefined) {
+    insertSetting.run('awards_pot_player_id', params.pot_player_id ? String(params.pot_player_id) : '');
+  }
+  if (params.pot_locked !== undefined) {
+    insertSetting.run('awards_pot_locked', params.pot_locked ? 'true' : 'false');
+  }
+  if (params.pot_revealed !== undefined) {
+    insertSetting.run('awards_pot_revealed', params.pot_revealed ? 'true' : 'false');
+    if (params.pot_revealed) {
+      insertSetting.run('awards_pot_revealed_at', new Date().toISOString());
+    }
+  }
+  if (params.tott_revealed !== undefined) {
+    insertSetting.run('awards_tott_revealed', params.tott_revealed ? 'true' : 'false');
+    if (params.tott_revealed) {
+      insertSetting.run('awards_tott_revealed_at', new Date().toISOString());
+    }
+  }
+  if (params.tott_data !== undefined) {
+    insertSetting.run('awards_tott_data', params.tott_data ? JSON.stringify(params.tott_data) : '');
+  }
+
+  logActivity('UPDATE_AWARDS', `Awards ceremony settings updated by ${adminUsername}`, adminUsername);
+  return { success: true };
 }
 

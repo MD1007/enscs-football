@@ -23,8 +23,10 @@ export interface Player {
   team_name?: string;
   is_captain: boolean;
   squad_number?: number | null;
+  position?: string | null;
   created_at?: string;
   // Aggregated stats
+  matches_played?: number;
   goals?: number;
   assists?: number;
   yellow_cards?: number;
@@ -152,6 +154,41 @@ export interface ActivityLog {
   created_at: string;
 }
 
+export interface TeamOfTournamentPlayer {
+  slot_id: string; // 'gk', 'pos_1', 'pos_2', 'pos_3', 'pos_4', 'sub_1', 'sub_2'
+  slot_type: 'starter' | 'substitute';
+  position_label: string; // 'GK', 'DEF', 'MID', 'FWD', 'SUB'
+  pitch_x: number; // percentage 0-100
+  pitch_y: number; // percentage 0-100
+  player_id: number;
+  player_name: string;
+  player_team_id: number;
+  player_team_name: string;
+  goals: number;
+  assists: number;
+  mvps: number;
+  points: number;
+}
+
+export interface TeamOfTournamentData {
+  formation: string; // '1-2-1', '2-2', '1-1-2', '2-1-1'
+  starters: TeamOfTournamentPlayer[]; // exactly 5
+  substitutes: TeamOfTournamentPlayer[]; // exactly 2
+}
+
+export interface TournamentAwardsState {
+  // Player of the Tournament
+  pot_revealed: boolean;
+  pot_revealed_at?: string | null;
+  pot_winner?: Player | null;
+  pot_mode: 'auto' | 'manual';
+  pot_locked: boolean;
+  // Team of the Tournament (7 players: 5 starters + 2 substitutes)
+  tott_revealed: boolean;
+  tott_revealed_at?: string | null;
+  tott_data?: TeamOfTournamentData | null;
+}
+
 export interface TournamentData {
   teams: Team[];
   players: Player[];
@@ -163,7 +200,8 @@ export interface TournamentData {
   top_scorers: { player: Player; goals: number; rank: number }[];
   top_assists: { player: Player; assists: number; rank: number }[];
   top_mvps: { player: Player; mvps: number; rank: number }[];
-  player_of_tournament?: { player: Player; points: number; rank: number; goals: number; assists: number; mvps: number }[];
+  player_of_tournament?: { player: Player; points: number; rank: number; goals: number; assists: number; mvps: number; appearances?: number }[];
+  awards?: TournamentAwardsState;
   yellow_cards: { player: Player; count: number; rank: number }[];
   red_cards: { player: Player; count: number; rank: number }[];
   summary: {

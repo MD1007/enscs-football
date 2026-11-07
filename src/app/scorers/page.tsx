@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { getFullTournamentData } from '@/lib/tournamentService';
 import { Flame, Trophy, Award, Shield } from 'lucide-react';
 
@@ -114,7 +115,12 @@ export default function ScorersPage() {
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                         <div className="flex items-center space-x-2">
-                          <span className="hover:text-emerald-400 transition">{item.player.name}</span>
+                          <Link
+                            href={`/players/${item.player.id}`}
+                            className="hover:text-amber-300 transition hover:underline font-bold"
+                          >
+                            {item.player.name}
+                          </Link>
                           {item.player.is_captain && (
                             <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
                               (C)

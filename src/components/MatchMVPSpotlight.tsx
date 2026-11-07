@@ -98,3 +98,4 @@ export default function MatchMVPSpotlight({ match, player }: MatchMVPSpotlightPr
     </div>
   );
 }
+

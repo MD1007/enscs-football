@@ -14,6 +14,7 @@ import {
   LogOut,
   Shield,
   ExternalLink,
+  Trophy,
 } from 'lucide-react';
 
 interface AdminNavClientProps {
@@ -33,6 +34,7 @@ export default function AdminNavClient({ username }: AdminNavClientProps) {
   const navItems = [
     { label: 'Overview', href: '/admin', icon: LayoutDashboard },
     { label: 'Match Results', href: '/admin/matches', icon: Calendar },
+    { label: '🏆 Awards', href: '/admin/awards', icon: Trophy },
     { label: 'Teams', href: '/admin/teams', icon: Users },
     { label: 'Players', href: '/admin/players', icon: UserPlus },
     { label: 'Knockout Stage', href: '/admin/knockout', icon: GitBranch },

@@ -163,6 +163,14 @@ function seedInitialData() {
   insertWeight.run('mvp_weight_yellow_card', '-1');
   insertWeight.run('mvp_weight_red_card', '-4');
 
+  // Awards settings defaults
+  insertWeight.run('awards_pot_revealed', 'false');
+  insertWeight.run('awards_tott_revealed', 'false');
+  insertWeight.run('awards_tott_data', '');
+  insertWeight.run('awards_pot_player_id', '');
+  insertWeight.run('awards_pot_mode', 'auto');
+  insertWeight.run('awards_pot_locked', 'false');
+
   // Check if rules exist
   const rulesCount = db.prepare('SELECT count(*) as count FROM tournament_rules').get() as { count: number };
   if (rulesCount.count === 0) {

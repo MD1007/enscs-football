@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Trophy, Calendar, Table, GitBranch, Crown } from 'lucide-react';
+import { Trophy, Calendar, Table, GitBranch, Crown, Award } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -17,7 +17,7 @@ export default function BottomNav() {
     { label: 'Home', href: '/', icon: Trophy },
     { label: 'Matches', href: '/matches', icon: Calendar },
     { label: 'Standings', href: '/standings', icon: Table },
-    { label: 'MVPs', href: '/mvps', icon: Crown },
+    { label: 'Awards', href: '/awards', icon: Award },
     { label: 'Bracket', href: '/knockout', icon: GitBranch },
   ];
 
@@ -59,3 +59,4 @@ export default function BottomNav() {
     </nav>
   );
 }
+

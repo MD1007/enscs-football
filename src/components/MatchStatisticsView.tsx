@@ -234,3 +234,4 @@ export default function MatchStatisticsView({ match }: MatchStatisticsViewProps)
     </div>
   );
 }
+

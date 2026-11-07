@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Crown, Trophy, Award, Shield, Star, Sparkles, Flame, Zap, Info } from 'lucide-react';
 import { Player } from '@/lib/types';
 
@@ -191,7 +192,12 @@ export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTab
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                             <div className="flex items-center space-x-2">
-                              <span className="hover:text-emerald-400 transition">{item.player.name}</span>
+                              <Link
+                                href={`/players/${item.player.id}`}
+                                className="hover:text-emerald-400 transition hover:underline font-bold"
+                              >
+                                {item.player.name}
+                              </Link>
                               {item.player.is_captain && (
                                 <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
                                   (C)
@@ -347,7 +353,12 @@ export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTab
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                             <div className="flex items-center space-x-2">
-                              <span className="hover:text-amber-400 transition">{item.player.name}</span>
+                              <Link
+                                href={`/players/${item.player.id}`}
+                                className="hover:text-amber-400 transition hover:underline font-bold"
+                              >
+                                {item.player.name}
+                              </Link>
                               {item.player.is_captain && (
                                 <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
                                   (C)
@@ -400,3 +411,4 @@ export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTab
     </div>
   );
 }
+
