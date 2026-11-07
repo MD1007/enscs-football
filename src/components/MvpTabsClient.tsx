@@ -25,39 +25,11 @@ interface MvpTabsClientProps {
   playerOfTheTournament: OverallPlayerItem[];
 }
 
-// Fallback placeholder data so the leaderboard is never empty on initial view
-const DEFAULT_PLACEHOLDER_MVPS: MvpItem[] = [
-  {
-    player: {
-      id: 76,
-      name: 'Oussama Meraihai',
-      team_id: 13,
-      team_name: 'OSPF',
-      is_captain: true,
-      position: 'Attacker',
-      goals: 1,
-      assists: 1,
-      mvps: 1,
-      yellow_cards: 0,
-      red_cards: 0,
-      matches_played: 1,
-      nicknames: [
-        { title: '👑 TOURNAMENT KINGPIN', subtitle: 'Most Match MVPs', color: 'amber' },
-      ],
-    },
-    mvps: 1,
-    rank: 1,
-  },
-];
-
-export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTabsClientProps) {
-  // Default active tab is now MATCH MVPs
+export default function MvpTabsClient({ topMvps = [], playerOfTheTournament = [] }: MvpTabsClientProps) {
+  // Default active tab is MATCH MVPs
   const [activeTab, setActiveTab] = useState<'mvps' | 'overall'>('mvps');
 
-  // Use topMvps if available, otherwise fallback to placeholder data showing at least one player
-  const displayMvps = topMvps && topMvps.length > 0 ? topMvps : DEFAULT_PLACEHOLDER_MVPS;
-  const mvpLeader = displayMvps[0] || null;
-
+  const mvpLeader = topMvps && topMvps.length > 0 ? topMvps[0] : null;
   const overallLeader = playerOfTheTournament && playerOfTheTournament.length > 0 ? playerOfTheTournament[0] : null;
 
   return (
@@ -74,7 +46,7 @@ export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTab
             }`}
           >
             <Star className="w-4 h-4 fill-current" />
-            <span>⭐ MATCH MVPs ({displayMvps.length})</span>
+            <span>⭐ MATCH MVPs ({topMvps.length})</span>
           </button>
           <button
             onClick={() => setActiveTab('overall')}
@@ -93,7 +65,7 @@ export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTab
       {/* MATCH MVPs TAB (ACTIVE BY DEFAULT) */}
       {activeTab === 'mvps' && (
         <div className="space-y-8 animate-fadeIn">
-          {/* Spotlight Hero Card */}
+          {/* Spotlight Hero Card (shown once an MVP is awarded) */}
           {mvpLeader && (
             <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-pitch-card to-purple-950/30 shadow-glow relative overflow-hidden">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
@@ -147,89 +119,95 @@ export default function MvpTabsClient({ topMvps, playerOfTheTournament }: MvpTab
                 <h3 className="font-bold text-white text-base">Match MVPs Leaderboard</h3>
               </div>
               <span className="text-xs text-slate-400 font-mono">
-                {displayMvps.length} Ranked Player{displayMvps.length === 1 ? '' : 's'}
+                {topMvps.length} Awarded Player{topMvps.length === 1 ? '' : 's'}
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-pitch-darkest/40">
-                    <th className="py-3 px-4 text-center w-16">Rank</th>
-                    <th className="py-3 px-4">Player & Badges</th>
-                    <th className="py-3 px-4">Team</th>
-                    <th className="py-3 px-4 text-center font-black text-amber-400">Total MVPs ⭐</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {displayMvps.map((item, index) => {
-                    const isTop = index === 0;
-                    return (
-                      <tr
-                        key={item.player.id || index}
-                        className={`transition hover:bg-white/[0.04] ${isTop ? 'bg-amber-950/20' : ''}`}
-                      >
-                        <td className="py-3.5 px-4 text-center font-bold">
-                          {isTop ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/50 text-xs font-black shadow-glow">
-                              1
-                            </span>
-                          ) : index === 1 ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-400/20 text-slate-300 border border-slate-400/50 text-xs font-black">
-                              2
-                            </span>
-                          ) : index === 2 ? (
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-700/20 text-amber-400 border border-amber-600/40 text-xs font-black">
-                              3
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-mono text-xs">{item.rank || index + 1}</span>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
-                          <div className="flex items-center space-x-2">
-                            {item.player.id ? (
+            {topMvps.length === 0 ? (
+              <div className="text-center py-16 text-slate-400 space-y-2">
+                <Star className="w-10 h-10 text-slate-600 mx-auto" />
+                <p className="font-semibold text-sm">No match MVPs awarded yet.</p>
+                <p className="text-xs text-slate-500">
+                  Official Man of the Match awards will appear here once matches are played and concluded.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[11px] font-bold uppercase tracking-wider text-slate-400 bg-pitch-darkest/40">
+                      <th className="py-3 px-4 text-center w-16">Rank</th>
+                      <th className="py-3 px-4">Player & Badges</th>
+                      <th className="py-3 px-4">Team</th>
+                      <th className="py-3 px-4 text-center font-black text-amber-400">Total MVPs ⭐</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {topMvps.map((item, index) => {
+                      const isTop = index === 0;
+                      return (
+                        <tr
+                          key={item.player.id || index}
+                          className={`transition hover:bg-white/[0.04] ${isTop ? 'bg-amber-950/20' : ''}`}
+                        >
+                          <td className="py-3.5 px-4 text-center font-bold">
+                            {isTop ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/50 text-xs font-black shadow-glow">
+                                1
+                              </span>
+                            ) : index === 1 ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-400/20 text-slate-300 border border-slate-400/50 text-xs font-black">
+                                2
+                              </span>
+                            ) : index === 2 ? (
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-amber-700/20 text-amber-400 border border-amber-600/40 text-xs font-black">
+                                3
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-xs">{item.rank || index + 1}</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
+                            <div className="flex items-center space-x-2">
                               <Link
                                 href={`/players/${item.player.id}`}
                                 className="hover:text-amber-400 transition hover:underline font-bold"
                               >
                                 {item.player.name}
                               </Link>
-                            ) : (
-                              <span className="font-bold text-white">{item.player.name}</span>
-                            )}
-                            {item.player.is_captain && (
-                              <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
-                                (C)
-                              </span>
-                            )}
-                          </div>
-                          {item.player.nicknames && item.player.nicknames.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {item.player.nicknames.map((nick, nIdx) => (
-                                <span
-                                  key={nIdx}
-                                  className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30"
-                                  title={nick.subtitle}
-                                >
-                                  {nick.title}
+                              {item.player.is_captain && (
+                                <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-bold">
+                                  (C)
                                 </span>
-                              ))}
+                              )}
                             </div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
-                          {item.player.team_name}
-                        </td>
-                        <td className="py-3.5 px-4 text-center font-mono font-black text-base text-amber-400">
-                          {item.mvps} ⭐
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            {item.player.nicknames && item.player.nicknames.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.player.nicknames.map((nick, nIdx) => (
+                                  <span
+                                    key={nIdx}
+                                    className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                    title={nick.subtitle}
+                                  >
+                                    {nick.title}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-slate-300 text-xs" dir="auto">
+                            {item.player.team_name}
+                          </td>
+                          <td className="py-3.5 px-4 text-center font-mono font-black text-base text-amber-400">
+                            {item.mvps} ⭐
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
