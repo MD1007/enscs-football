@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import BottomNav from '@/components/BottomNav';
 import { getFullTournamentData } from '@/lib/tournamentService';
 
 export const metadata: Metadata = {
@@ -39,8 +40,9 @@ export default function RootLayout({
       </head>
       <body className="bg-pitch-darkest text-slate-100 flex flex-col min-h-screen selection:bg-emerald-500 selection:text-black">
         <Navbar nextMatchTime={nextMatchTime} />
-        <main className="flex-grow">{children}</main>
+        <main className="flex-grow pb-16 lg:pb-0">{children}</main>
         <Footer />
+        <BottomNav />
       </body>
     </html>
   );

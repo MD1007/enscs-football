@@ -11,7 +11,30 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { action, match_id, home_score, away_score, home_penalties, away_penalties, status, events, winner_team_id, mvp_player_id, scheduled_time, venue } = body;
+    const {
+      action,
+      match_id,
+      home_score,
+      away_score,
+      home_penalties,
+      away_penalties,
+      status,
+      events,
+      winner_team_id,
+      mvp_player_id,
+      mvp_mode,
+      mvp_score,
+      possession_home,
+      possession_away,
+      shots_home,
+      shots_away,
+      shots_on_target_home,
+      shots_on_target_away,
+      fouls_home,
+      fouls_away,
+      scheduled_time,
+      venue,
+    } = body;
 
     if (!match_id) {
       return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
@@ -31,7 +54,7 @@ export async function PUT(request: Request) {
       updateMatchSchedule(Number(match_id), scheduled_time, venue || 'Terrain ENSCS', admin.username);
     }
 
-    // Update match result and events
+    // Update match result, stats, MVP, and events
     updateMatchResult(
       Number(match_id),
       {
@@ -42,6 +65,16 @@ export async function PUT(request: Request) {
         status: status || 'finished',
         winner_team_id: winner_team_id ? Number(winner_team_id) : null,
         mvp_player_id: mvp_player_id ? Number(mvp_player_id) : null,
+        mvp_mode: mvp_mode || 'auto',
+        mvp_score: mvp_score !== undefined && mvp_score !== null ? Number(mvp_score) : null,
+        possession_home: possession_home !== undefined && possession_home !== '' && possession_home !== null ? Number(possession_home) : null,
+        possession_away: possession_away !== undefined && possession_away !== '' && possession_away !== null ? Number(possession_away) : null,
+        shots_home: shots_home !== undefined && shots_home !== '' && shots_home !== null ? Number(shots_home) : null,
+        shots_away: shots_away !== undefined && shots_away !== '' && shots_away !== null ? Number(shots_away) : null,
+        shots_on_target_home: shots_on_target_home !== undefined && shots_on_target_home !== '' && shots_on_target_home !== null ? Number(shots_on_target_home) : null,
+        shots_on_target_away: shots_on_target_away !== undefined && shots_on_target_away !== '' && shots_on_target_away !== null ? Number(shots_on_target_away) : null,
+        fouls_home: fouls_home !== undefined && fouls_home !== '' && fouls_home !== null ? Number(fouls_home) : null,
+        fouls_away: fouls_away !== undefined && fouls_away !== '' && fouls_away !== null ? Number(fouls_away) : null,
         events: events || [],
       },
       admin.username

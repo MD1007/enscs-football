@@ -3,6 +3,7 @@ import {
   calculateGroupStandings,
   calculateBestSecondPlace,
   aggregatePlayerStats,
+  calculateMatchMVP,
   isGroupStageComplete,
 } from './calculations';
 import {
@@ -75,11 +76,15 @@ export function getFullTournamentData(): TournamentData {
   `).all() as any[];
 
   const eventsRaw = db.prepare(`
-    SELECT e.*, p.name as player_name, t.name as team_name
+    SELECT e.*, 
+           p.name as player_name, 
+           t.name as team_name,
+           ap.name as assister_name
     FROM match_events e
     JOIN players p ON e.player_id = p.id
     JOIN teams t ON e.team_id = t.id
-    ORDER BY e.minute ASC, e.id ASC
+    LEFT JOIN players ap ON e.assister_id = ap.id
+    ORDER BY COALESCE(e.minute, 999) ASC, e.id ASC
   `).all() as any[];
 
   const eventsByMatch: Record<number, MatchEvent[]> = {};
@@ -113,7 +118,7 @@ export function getFullTournamentData(): TournamentData {
 
   const best_second = calculateBestSecondPlace(standings);
 
-  const { playersWithStats, topScorers, topAssists, topMVPs, yellowCards, redCards } = aggregatePlayerStats(
+  const { playersWithStats, topScorers, topAssists, topMVPs, playerOfTheTournament, yellowCards, redCards } = aggregatePlayerStats(
     playersRaw.map((p) => ({ ...p, is_captain: Boolean(p.is_captain) })),
     teams,
     matches
@@ -146,6 +151,7 @@ export function getFullTournamentData(): TournamentData {
     top_scorers: topScorers,
     top_assists: topAssists,
     top_mvps: topMVPs,
+    player_of_tournament: playerOfTheTournament,
     yellow_cards: yellowCards,
     red_cards: redCards,
     summary: {
@@ -201,12 +207,24 @@ export function updateMatchResult(
     status: string;
     winner_team_id?: number | null;
     mvp_player_id?: number | null;
+    mvp_mode?: 'auto' | 'manual' | null;
+    mvp_score?: number | null;
+    possession_home?: number | null;
+    possession_away?: number | null;
+    shots_home?: number | null;
+    shots_away?: number | null;
+    shots_on_target_home?: number | null;
+    shots_on_target_away?: number | null;
+    fouls_home?: number | null;
+    fouls_away?: number | null;
     events: Array<{
       player_id: number;
       team_id: number;
       event_type: 'goal' | 'assist' | 'yellow_card' | 'red_card';
+      sub_type?: 'normal' | 'penalty' | 'own_goal' | null;
       minute?: number | null;
       detail?: string | null;
+      assister_id?: number | null;
     }>;
   },
   adminUsername: string
@@ -222,6 +240,44 @@ export function updateMatchResult(
   if (!match) throw new Error('Match not found');
 
   const transaction = db.transaction(() => {
+    let finalMvpPlayerId = data.mvp_player_id !== undefined ? data.mvp_player_id : match.mvp_player_id;
+    let finalMvpScore = data.mvp_score !== undefined ? data.mvp_score : match.mvp_score;
+    const mvpMode = data.mvp_mode || match.mvp_mode || 'auto';
+
+    // Calculate Automatic MVP if in auto mode
+    if (mvpMode === 'auto' && (data.status === 'finished' || data.status === 'live')) {
+      const matchObj: Match = {
+        ...match,
+        home_score: data.home_score,
+        away_score: data.away_score,
+        home_penalties: data.home_penalties,
+        away_penalties: data.away_penalties,
+        status: data.status as any,
+        winner_team_id: data.winner_team_id,
+      };
+
+      const matchPlayers = db.prepare('SELECT * FROM players WHERE team_id IN (?, ?)').all(
+        match.home_team_id,
+        match.away_team_id
+      ) as Player[];
+
+      const formattedEvents: MatchEvent[] = (data.events || []).map((e, idx) => ({
+        id: idx + 1,
+        match_id: matchId,
+        team_id: e.team_id,
+        player_id: e.player_id,
+        event_type: e.event_type,
+        sub_type: e.sub_type || 'normal',
+        minute: e.minute,
+        detail: e.detail,
+        assister_id: e.assister_id,
+      }));
+
+      const mvpRes = calculateMatchMVP(matchObj, matchPlayers, formattedEvents);
+      finalMvpPlayerId = mvpRes.mvpPlayerId;
+      finalMvpScore = mvpRes.mvpScore;
+    }
+
     // 1. Update Match record
     db.prepare(`
       UPDATE matches
@@ -231,7 +287,17 @@ export function updateMatchResult(
           away_penalties = ?,
           status = ?,
           winner_team_id = ?,
-          mvp_player_id = ?
+          mvp_player_id = ?,
+          mvp_mode = ?,
+          mvp_score = ?,
+          possession_home = ?,
+          possession_away = ?,
+          shots_home = ?,
+          shots_away = ?,
+          shots_on_target_home = ?,
+          shots_on_target_away = ?,
+          fouls_home = ?,
+          fouls_away = ?
       WHERE id = ?
     `).run(
       data.home_score,
@@ -240,7 +306,17 @@ export function updateMatchResult(
       data.away_penalties || null,
       data.status,
       data.winner_team_id || null,
-      data.mvp_player_id !== undefined ? data.mvp_player_id : null,
+      finalMvpPlayerId || null,
+      mvpMode,
+      finalMvpScore || null,
+      data.possession_home !== undefined && data.possession_home !== null ? Number(data.possession_home) : null,
+      data.possession_away !== undefined && data.possession_away !== null ? Number(data.possession_away) : null,
+      data.shots_home !== undefined && data.shots_home !== null ? Number(data.shots_home) : null,
+      data.shots_away !== undefined && data.shots_away !== null ? Number(data.shots_away) : null,
+      data.shots_on_target_home !== undefined && data.shots_on_target_home !== null ? Number(data.shots_on_target_home) : null,
+      data.shots_on_target_away !== undefined && data.shots_on_target_away !== null ? Number(data.shots_on_target_away) : null,
+      data.fouls_home !== undefined && data.fouls_home !== null ? Number(data.fouls_home) : null,
+      data.fouls_away !== undefined && data.fouls_away !== null ? Number(data.fouls_away) : null,
       matchId
     );
 
@@ -250,8 +326,8 @@ export function updateMatchResult(
     // 3. Insert new events
     if (data.events && data.events.length > 0) {
       const insertEvent = db.prepare(`
-        INSERT INTO match_events (match_id, team_id, player_id, event_type, minute, detail)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO match_events (match_id, team_id, player_id, event_type, sub_type, minute, detail, assister_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const ev of data.events) {
@@ -260,8 +336,10 @@ export function updateMatchResult(
           ev.team_id,
           ev.player_id,
           ev.event_type,
+          ev.sub_type || 'normal',
           ev.minute || null,
-          ev.detail || null
+          ev.detail || null,
+          ev.assister_id || null
         );
       }
     }
@@ -274,7 +352,7 @@ export function updateMatchResult(
     // 5. Activity log
     logActivity(
       'UPDATE_MATCH_RESULT',
-      `Result entered for ${match.home_name || 'TBD'} vs ${match.away_name || 'TBD'}: ${data.home_score ?? 0} - ${data.away_score ?? 0} (${data.status})`,
+      `Result and events entered for ${match.home_name || 'TBD'} vs ${match.away_name || 'TBD'}: ${data.home_score ?? 0} - ${data.away_score ?? 0} (${data.status}) [MVP: #${finalMvpPlayerId || 'None'} / ${mvpMode}]`,
       adminUsername
     );
   });

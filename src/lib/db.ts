@@ -103,10 +103,28 @@ export function initDatabase() {
     );
   `);
 
-  try {
-    db.prepare('ALTER TABLE matches ADD COLUMN mvp_player_id INTEGER').run();
-  } catch (e) {
-    // Column already exists
+  const migrations = [
+    'ALTER TABLE matches ADD COLUMN mvp_player_id INTEGER',
+    'ALTER TABLE matches ADD COLUMN mvp_mode TEXT DEFAULT "auto"',
+    'ALTER TABLE matches ADD COLUMN mvp_score INTEGER',
+    'ALTER TABLE matches ADD COLUMN possession_home INTEGER',
+    'ALTER TABLE matches ADD COLUMN possession_away INTEGER',
+    'ALTER TABLE matches ADD COLUMN shots_home INTEGER',
+    'ALTER TABLE matches ADD COLUMN shots_away INTEGER',
+    'ALTER TABLE matches ADD COLUMN shots_on_target_home INTEGER',
+    'ALTER TABLE matches ADD COLUMN shots_on_target_away INTEGER',
+    'ALTER TABLE matches ADD COLUMN fouls_home INTEGER',
+    'ALTER TABLE matches ADD COLUMN fouls_away INTEGER',
+    'ALTER TABLE match_events ADD COLUMN sub_type TEXT DEFAULT "normal"',
+    'ALTER TABLE match_events ADD COLUMN assister_id INTEGER',
+  ];
+
+  for (const sql of migrations) {
+    try {
+      db.prepare(sql).run();
+    } catch (e) {
+      // Column already exists
+    }
   }
 
   seedInitialData();
@@ -130,7 +148,20 @@ function seedInitialData() {
     insertSetting.run('discrepancy_resolved', 'false'); // Flags the 11 vs 12 teams discrepancy
     insertSetting.run('discrepancy_notice', 'Official graphic shows 12 teams in 3 groups of 4 (18 matches total). Written announcement mentioned 11 teams. The system is loaded with the visual schedule of 12 teams and 18 matches, and can be customized or confirmed by the admin.');
     insertSetting.run('qualification_format', 'group_winners_plus_best_second'); // 1st A, 1st B, 1st C + Best 2nd place
+    insertSetting.run('mvp_weight_goal', '5');
+    insertSetting.run('mvp_weight_assist', '3');
+    insertSetting.run('mvp_weight_clean_sheet', '4');
+    insertSetting.run('mvp_weight_yellow_card', '-1');
+    insertSetting.run('mvp_weight_red_card', '-4');
   }
+
+  // Ensure default weights exist even on existing database
+  const insertWeight = db.prepare('INSERT OR IGNORE INTO tournament_settings (key, value) VALUES (?, ?)');
+  insertWeight.run('mvp_weight_goal', '5');
+  insertWeight.run('mvp_weight_assist', '3');
+  insertWeight.run('mvp_weight_clean_sheet', '4');
+  insertWeight.run('mvp_weight_yellow_card', '-1');
+  insertWeight.run('mvp_weight_red_card', '-4');
 
   // Check if rules exist
   const rulesCount = db.prepare('SELECT count(*) as count FROM tournament_rules').get() as { count: number };

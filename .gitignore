@@ -29,4 +29,6 @@ next-env.d.ts
 
 # Keep initial database in repository
 !data/tournament.db
+data/*.db-shm
+data/*.db-wal
 

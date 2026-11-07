@@ -213,9 +213,13 @@ export function aggregatePlayerStats(
       yellow_cards: 0,
       red_cards: 0,
       mvps: 0,
+      overall_points: 0,
       nicknames: [],
     };
   });
+
+  // Track assists to avoid double-counting between linked events
+  const countedAssists = new Set<string>();
 
   // Collect all events and MVPs from matches
   for (const m of matches) {
@@ -226,15 +230,30 @@ export function aggregatePlayerStats(
     if (!m.events) continue;
     for (const ev of m.events) {
       const p = playerMap[ev.player_id];
-      if (!p) continue;
 
+      // Goal handling: Own goals do NOT count toward the scorer's goal tally
       if (ev.event_type === 'goal') {
-        p.goals = (p.goals || 0) + 1;
-      } else if (ev.event_type === 'assist') {
-        p.assists = (p.assists || 0) + 1;
-      } else if (ev.event_type === 'yellow_card') {
+        if (ev.sub_type !== 'own_goal' && p) {
+          p.goals = (p.goals || 0) + 1;
+        }
+
+        // Direct assist on goal event
+        if (ev.assister_id && playerMap[ev.assister_id]) {
+          const assistKey = `goal-${ev.id || m.id}-${ev.assister_id}-${ev.minute || 0}`;
+          if (!countedAssists.has(assistKey)) {
+            countedAssists.add(assistKey);
+            playerMap[ev.assister_id].assists = (playerMap[ev.assister_id].assists || 0) + 1;
+          }
+        }
+      } else if (ev.event_type === 'assist' && p) {
+        const assistKey = `assist-${ev.id || m.id}-${ev.player_id}-${ev.minute || 0}`;
+        if (!countedAssists.has(assistKey)) {
+          countedAssists.add(assistKey);
+          p.assists = (p.assists || 0) + 1;
+        }
+      } else if (ev.event_type === 'yellow_card' && p) {
         p.yellow_cards = (p.yellow_cards || 0) + 1;
-      } else if (ev.event_type === 'red_card') {
+      } else if (ev.event_type === 'red_card' && p) {
         p.red_cards = (p.red_cards || 0) + 1;
       }
     }
@@ -242,7 +261,20 @@ export function aggregatePlayerStats(
 
   const allPlayersWithStats = Object.values(playerMap);
 
-  // Top scorers (goals > 0)
+  // Calculate Overall Performance Points for each player:
+  // Goals (+5), Assists (+3), MVPs (+10), Yellow (-1), Red (-4)
+  for (const p of allPlayersWithStats) {
+    p.overall_points = Math.max(
+      0,
+      (p.goals || 0) * 5 +
+        (p.assists || 0) * 3 +
+        (p.mvps || 0) * 10 -
+        (p.yellow_cards || 0) * 1 -
+        (p.red_cards || 0) * 4
+    );
+  }
+
+  // Top scorers (goals > 0, excluding own goals)
   const topScorers = allPlayersWithStats
     .filter((p) => (p.goals || 0) > 0)
     .sort((a, b) => (b.goals || 0) - (a.goals || 0) || a.name.localeCompare(b.name))
@@ -270,6 +302,25 @@ export function aggregatePlayerStats(
       player,
       mvps: player.mvps || 0,
       rank: idx + 1,
+    }));
+
+  // Player of the Tournament (Overall Index)
+  const playerOfTheTournament = allPlayersWithStats
+    .filter((p) => (p.overall_points || 0) > 0 || (p.mvps || 0) > 0 || (p.goals || 0) > 0)
+    .sort(
+      (a, b) =>
+        (b.overall_points || 0) - (a.overall_points || 0) ||
+        (b.mvps || 0) - (a.mvps || 0) ||
+        (b.goals || 0) - (a.goals || 0) ||
+        a.name.localeCompare(b.name)
+    )
+    .map((player, idx) => ({
+      player,
+      points: player.overall_points || 0,
+      rank: idx + 1,
+      goals: player.goals || 0,
+      assists: player.assists || 0,
+      mvps: player.mvps || 0,
     }));
 
   // Assign Hyping Nicknames
@@ -346,8 +397,154 @@ export function aggregatePlayerStats(
     topScorers,
     topAssists,
     topMVPs,
+    playerOfTheTournament,
     yellowCards,
     redCards,
+  };
+}
+
+/**
+ * Calculates Automatic MVP for a specific match following official rules:
+ * Rule 1: Winning team priority! (If match has a winner, MVP MUST come from the winning team).
+ * Rule 2: Draws evaluate all players across both teams.
+ * Rule 3: Weighted fair formula (Goals +5, Assists +3, Clean sheet +4, Yellow -1, Red -4, Own Goal -3).
+ */
+export function calculateMatchMVP(
+  match: Match,
+  players: Player[],
+  events: MatchEvent[],
+  weights = {
+    goal: 5,
+    assist: 3,
+    cleanSheet: 4,
+    yellowCard: -1,
+    redCard: -4,
+  }
+) {
+  const homeScore = match.home_score ?? 0;
+  const awayScore = match.away_score ?? 0;
+
+  // Determine winner team
+  let winnerTeamId: number | null = match.winner_team_id || null;
+  if (!winnerTeamId && (match.status === 'finished' || match.status === 'live')) {
+    if (homeScore > awayScore) winnerTeamId = match.home_team_id;
+    else if (awayScore > homeScore) winnerTeamId = match.away_team_id;
+    else if (match.home_penalties != null && match.away_penalties != null) {
+      if (Number(match.home_penalties) > Number(match.away_penalties)) winnerTeamId = match.home_team_id;
+      else if (Number(match.away_penalties) > Number(match.home_penalties)) winnerTeamId = match.away_team_id;
+    }
+  }
+
+  // Get all players for both participating teams
+  const matchPlayers = players.filter(
+    (p) => p.team_id === match.home_team_id || p.team_id === match.away_team_id
+  );
+
+  const scoresMap: Record<
+    number,
+    {
+      player: Player;
+      score: number;
+      isWinner: boolean;
+      breakdown: {
+        goals: number;
+        assists: number;
+        yellowCards: number;
+        redCards: number;
+        ownGoals: number;
+        cleanSheet: boolean;
+      };
+    }
+  > = {};
+
+  for (const p of matchPlayers) {
+    const isWinner = winnerTeamId ? p.team_id === winnerTeamId : false;
+    scoresMap[p.id] = {
+      player: p,
+      score: 0,
+      isWinner,
+      breakdown: {
+        goals: 0,
+        assists: 0,
+        yellowCards: 0,
+        redCards: 0,
+        ownGoals: 0,
+        cleanSheet: false,
+      },
+    };
+
+    // Clean sheet bonus: if team conceded 0 in a finished match
+    if (match.status === 'finished' || match.status === 'live') {
+      const conceded = p.team_id === match.home_team_id ? awayScore : homeScore;
+      if (conceded === 0) {
+        scoresMap[p.id].score += weights.cleanSheet;
+        scoresMap[p.id].breakdown.cleanSheet = true;
+      }
+    }
+  }
+
+  // Process match events
+  for (const ev of events) {
+    if (ev.event_type === 'goal') {
+      if (ev.sub_type === 'own_goal') {
+        if (scoresMap[ev.player_id]) {
+          scoresMap[ev.player_id].score -= 3;
+          scoresMap[ev.player_id].breakdown.ownGoals += 1;
+        }
+      } else {
+        if (scoresMap[ev.player_id]) {
+          scoresMap[ev.player_id].score += weights.goal;
+          scoresMap[ev.player_id].breakdown.goals += 1;
+        }
+        if (ev.assister_id && scoresMap[ev.assister_id]) {
+          scoresMap[ev.assister_id].score += weights.assist;
+          scoresMap[ev.assister_id].breakdown.assists += 1;
+        }
+      }
+    } else if (ev.event_type === 'assist' && scoresMap[ev.player_id]) {
+      scoresMap[ev.player_id].score += weights.assist;
+      scoresMap[ev.player_id].breakdown.assists += 1;
+    } else if (ev.event_type === 'yellow_card' && scoresMap[ev.player_id]) {
+      scoresMap[ev.player_id].score += weights.yellowCard;
+      scoresMap[ev.player_id].breakdown.yellowCards += 1;
+    } else if (ev.event_type === 'red_card' && scoresMap[ev.player_id]) {
+      scoresMap[ev.player_id].score += weights.redCard;
+      scoresMap[ev.player_id].breakdown.redCards += 1;
+    }
+  }
+
+  const allScores = Object.values(scoresMap);
+
+  // RULE 1: WINNING TEAM PREFERENCE!
+  // If match has a winner, ONLY players from the winning team are eligible for the Automatic MVP!
+  let eligibleCandidates = allScores;
+  if (winnerTeamId !== null) {
+    const winningCandidates = allScores.filter((c) => c.player.team_id === winnerTeamId);
+    if (winningCandidates.length > 0) {
+      eligibleCandidates = winningCandidates;
+    }
+  }
+
+  // Sort candidates by score descending
+  eligibleCandidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.breakdown.goals !== a.breakdown.goals) return b.breakdown.goals - a.breakdown.goals;
+    if (b.breakdown.assists !== a.breakdown.assists) return b.breakdown.assists - a.breakdown.assists;
+    if (b.player.is_captain !== a.player.is_captain) return b.player.is_captain ? 1 : -1;
+    return a.player.name.localeCompare(b.player.name);
+  });
+
+  const bestCandidate = eligibleCandidates.length > 0 ? eligibleCandidates[0] : null;
+
+  return {
+    mvpPlayerId: bestCandidate ? bestCandidate.player.id : null,
+    mvpScore: bestCandidate ? bestCandidate.score : 0,
+    topScore: bestCandidate ? bestCandidate.score : 0,
+    bestCandidate,
+    winnerTeamId,
+    rankings: eligibleCandidates,
+    sortedCandidates: eligibleCandidates,
+    allScores,
   };
 }
 

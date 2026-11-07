@@ -6,6 +6,8 @@ export type MatchStage = 'group' | 'semi_final' | 'third_place' | 'final';
 
 export type EventType = 'goal' | 'assist' | 'yellow_card' | 'red_card';
 
+export type GoalType = 'normal' | 'penalty' | 'own_goal';
+
 export interface PlayerBadge {
   title: string;
   subtitle: string;
@@ -28,6 +30,7 @@ export interface Player {
   yellow_cards?: number;
   red_cards?: number;
   mvps?: number;
+  overall_points?: number;
   nicknames?: PlayerBadge[];
 }
 
@@ -50,8 +53,11 @@ export interface MatchEvent {
   team_id: number;
   player_id: number;
   event_type: EventType;
+  sub_type?: GoalType | null;
   minute?: number | null;
   detail?: string | null;
+  assister_id?: number | null;
+  assister_name?: string | null;
   player_name?: string;
   team_name?: string;
 }
@@ -80,6 +86,16 @@ export interface Match {
   mvp_player_id?: number | null;
   mvp_player_name?: string | null;
   mvp_team_name?: string | null;
+  mvp_mode?: 'auto' | 'manual' | null;
+  mvp_score?: number | null;
+  possession_home?: number | null;
+  possession_away?: number | null;
+  shots_home?: number | null;
+  shots_away?: number | null;
+  shots_on_target_home?: number | null;
+  shots_on_target_away?: number | null;
+  fouls_home?: number | null;
+  fouls_away?: number | null;
   events?: MatchEvent[];
 }
 
@@ -147,6 +163,7 @@ export interface TournamentData {
   top_scorers: { player: Player; goals: number; rank: number }[];
   top_assists: { player: Player; assists: number; rank: number }[];
   top_mvps: { player: Player; mvps: number; rank: number }[];
+  player_of_tournament?: { player: Player; points: number; rank: number; goals: number; assists: number; mvps: number }[];
   yellow_cards: { player: Player; count: number; rank: number }[];
   red_cards: { player: Player; count: number; rank: number }[];
   summary: {

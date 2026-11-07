@@ -2,16 +2,19 @@ import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getFullTournamentData } from '@/lib/tournamentService';
+import MatchEventsTimeline from '@/components/MatchEventsTimeline';
+import MatchStatisticsView from '@/components/MatchStatisticsView';
+import MatchMVPSpotlight from '@/components/MatchMVPSpotlight';
 import {
   Calendar,
   Clock,
   MapPin,
-  Shield,
   ChevronLeft,
-  Share2,
+  ChevronRight,
+  Shield,
+  Activity,
   Award,
-  Flame,
-  AlertTriangle,
+  Users,
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -35,11 +38,12 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
   const homePlayers = data.players.filter((p) => p.team_id === match.home_team_id);
   const awayPlayers = data.players.filter((p) => p.team_id === match.away_team_id);
 
-  const events = match.events || [];
-  const goals = events.filter((e) => e.event_type === 'goal');
-  const assists = events.filter((e) => e.event_type === 'assist');
-  const yellowCards = events.filter((e) => e.event_type === 'yellow_card');
-  const redCards = events.filter((e) => e.event_type === 'red_card');
+  const mvpPlayer = data.players.find((p) => p.id === match.mvp_player_id);
+
+  const allMatches = data.matches;
+  const currentIndex = allMatches.findIndex((m) => m.id === matchId);
+  const prevMatch = currentIndex > 0 ? allMatches[currentIndex - 1] : null;
+  const nextMatch = currentIndex < allMatches.length - 1 ? allMatches[currentIndex + 1] : null;
 
   const formattedDate = new Date(match.scheduled_time).toLocaleString('en-US', {
     weekday: 'long',
@@ -72,27 +76,49 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-10">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8 sm:space-y-10">
       {/* Navigation & Header */}
       <div className="flex items-center justify-between">
         <Link
           href="/matches"
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-400 hover:text-white transition px-3 py-1.5 rounded-lg bg-pitch-card border border-pitch-border"
+          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-400 hover:text-white transition px-3 py-1.5 rounded-xl bg-pitch-card border border-pitch-border"
         >
           <ChevronLeft className="w-4 h-4" />
-          <span>Back to Matches</span>
+          <span>All Matches</span>
         </Link>
 
-        <span
-          className={`text-xs px-3 py-1 rounded-full border font-bold uppercase tracking-wider ${getGroupBadgeColor(
-            match.group_id
-          )}`}
-        >
-          {getStageTitle()}
-        </span>
+        <div className="flex items-center space-x-2">
+          {prevMatch && (
+            <Link
+              href={`/matches/${prevMatch.id}`}
+              className="p-1.5 rounded-xl bg-pitch-card border border-pitch-border text-slate-400 hover:text-white text-xs"
+              title="Previous Match"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Link>
+          )}
+
+          <span
+            className={`text-xs px-3 py-1 rounded-full border font-bold uppercase tracking-wider ${getGroupBadgeColor(
+              match.group_id
+            )}`}
+          >
+            {getStageTitle()}
+          </span>
+
+          {nextMatch && (
+            <Link
+              href={`/matches/${nextMatch.id}`}
+              className="p-1.5 rounded-xl bg-pitch-card border border-pitch-border text-slate-400 hover:text-white text-xs"
+              title="Next Match"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
       </div>
 
-      {/* Main Scorecard Banner */}
+      {/* Main Stadium Scoreboard Banner */}
       <div className="glass-panel rounded-3xl p-6 sm:p-10 border border-pitch-border bg-gradient-to-r from-emerald-950/40 via-pitch-card to-blue-950/40 relative overflow-hidden shadow-2xl">
         <div className="text-center pb-6 border-b border-white/5">
           <span
@@ -191,141 +217,61 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
             </div>
           </div>
         </div>
-
-        {/* Official MVP Highlight */}
-        {match.mvp_player_name && (
-          <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/5 to-transparent border border-amber-500/30">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-xl shadow-glow">
-                ⭐
-              </div>
-              <div>
-                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <span>Official Man of the Match (MVP)</span>
-                  <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">AWARD</span>
-                </span>
-                <span className="text-lg font-black text-white" dir="auto">
-                  {match.mvp_player_name}
-                </span>
-              </div>
-            </div>
-            {match.mvp_team_name && (
-              <span className="text-xs font-bold text-slate-300 px-3.5 py-1.5 rounded-xl bg-pitch-darkest border border-white/10" dir="auto">
-                {match.mvp_team_name}
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Events & Match Timeline */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Goals & Assists */}
-        <div className="glass-panel rounded-2xl p-6 border border-pitch-border bg-pitch-card/80 space-y-4">
-          <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
-            <Flame className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-bold text-white text-base">Goals & Key Passes</h3>
-          </div>
+      {/* Official Match MVP Showcase */}
+      {(match.mvp_player_name || mvpPlayer) && (
+        <MatchMVPSpotlight match={match} player={mvpPlayer} />
+      )}
 
-          {goals.length === 0 && assists.length === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">No goal events registered for this match.</p>
-          ) : (
-            <div className="space-y-3">
-              {goals.map((goal) => (
-                <div
-                  key={goal.id}
-                  className="p-3 rounded-xl bg-pitch-darkest border border-white/5 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <span className="font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      {goal.minute ? `${goal.minute}'` : '⚽'}
-                    </span>
-                    <span className="font-bold text-white text-sm" dir="auto">
-                      {goal.player_name}
-                    </span>
-                  </div>
-                  <span className="text-slate-400 text-xs" dir="auto">
-                    {goal.team_name}
-                  </span>
-                </div>
-              ))}
-
-              {assists.map((assist) => (
-                <div
-                  key={assist.id}
-                  className="p-3 rounded-xl bg-pitch-darkest border border-blue-500/20 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <span className="font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                      👟 Assist
-                    </span>
-                    <span className="font-bold text-white text-sm" dir="auto">
-                      {assist.player_name}
-                    </span>
-                  </div>
-                  <span className="text-slate-400 text-xs" dir="auto">
-                    {assist.team_name}
-                  </span>
-                </div>
-              ))}
+      {/* EA Sports FC Inspired Match Events Timeline */}
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-pitch-border bg-pitch-card/80 space-y-6">
+        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Activity className="w-4 h-4" />
             </div>
-          )}
+            <div>
+              <h3 className="font-black text-white text-base sm:text-lg uppercase tracking-tight">
+                Match Events Timeline
+              </h3>
+              <p className="text-xs text-slate-400">
+                Chronological sequence of goals, assists, and disciplinary cards
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Disciplinary Events */}
-        <div className="glass-panel rounded-2xl p-6 border border-pitch-border bg-pitch-card/80 space-y-4">
-          <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400" />
-            <h3 className="font-bold text-white text-base">Disciplinary Records</h3>
-          </div>
+        <MatchEventsTimeline match={match} />
+      </div>
 
-          {yellowCards.length === 0 && redCards.length === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">Clean match — No disciplinary sanctions issued.</p>
-          ) : (
-            <div className="space-y-3">
-              {yellowCards.map((yc) => (
-                <div
-                  key={yc.id}
-                  className="p-3 rounded-xl bg-pitch-darkest border border-amber-500/30 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <span className="w-3.5 h-5 rounded-sm bg-amber-400 inline-block shadow-sm"></span>
-                    <span className="font-bold text-white text-sm" dir="auto">
-                      {yc.player_name}
-                    </span>
-                    {yc.minute && <span className="text-slate-500 font-mono">({yc.minute}')</span>}
-                  </div>
-                  <span className="text-slate-400 text-xs" dir="auto">
-                    {yc.team_name}
-                  </span>
-                </div>
-              ))}
-
-              {redCards.map((rc) => (
-                <div
-                  key={rc.id}
-                  className="p-3 rounded-xl bg-pitch-darkest border border-red-500/40 flex items-center justify-between text-xs"
-                >
-                  <div className="flex items-center space-x-2.5">
-                    <span className="w-3.5 h-5 rounded-sm bg-red-600 inline-block shadow-sm animate-pulse"></span>
-                    <span className="font-bold text-white text-sm" dir="auto">
-                      {rc.player_name}
-                    </span>
-                    {rc.minute && <span className="text-slate-500 font-mono">({rc.minute}')</span>}
-                  </div>
-                  <span className="text-slate-400 text-xs" dir="auto">
-                    {rc.team_name}
-                  </span>
-                </div>
-              ))}
+      {/* Match Statistics & Comparison */}
+      <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-pitch-border bg-pitch-card/80 space-y-6">
+        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <Award className="w-4 h-4" />
             </div>
-          )}
+            <div>
+              <h3 className="font-black text-white text-base sm:text-lg uppercase tracking-tight">
+                Match Statistics
+              </h3>
+              <p className="text-xs text-slate-400">
+                In-depth performance breakdown between both squads
+              </p>
+            </div>
+          </div>
         </div>
+
+        <MatchStatisticsView match={match} />
       </div>
 
       {/* Team Rosters Side by Side */}
-      <div className="space-y-4 pt-4">
-        <h3 className="text-lg font-bold text-white uppercase tracking-wider">Team Squads</h3>
+      <div className="space-y-4 pt-2">
+        <div className="flex items-center space-x-2">
+          <Users className="w-5 h-5 text-slate-400" />
+          <h3 className="text-lg font-bold text-white uppercase tracking-wider">Team Squad Lineups</h3>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Home Squad */}
@@ -334,24 +280,46 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
               {match.home_team_name} Roster
             </h4>
             <div className="space-y-1.5 text-xs">
-              {homePlayers.map((p, idx) => (
-                <div
-                  key={p.id}
-                  className="p-2 rounded-lg bg-pitch-darkest/60 flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono text-slate-500 text-[10px] w-4">{idx + 1}.</span>
-                    <span className="font-semibold text-white" dir="auto">
-                      {p.name}
-                    </span>
+              {homePlayers.map((p, idx) => {
+                const pGoals = (match.events || []).filter(
+                  (e) => e.player_id === p.id && e.event_type === 'goal' && e.sub_type !== 'own_goal'
+                ).length;
+                const pAssists = (match.events || []).filter(
+                  (e) => (e.player_id === p.id && e.event_type === 'assist') || e.assister_id === p.id
+                ).length;
+                const pYellow = (match.events || []).filter(
+                  (e) => e.player_id === p.id && e.event_type === 'yellow_card'
+                ).length;
+                const pRed = (match.events || []).filter(
+                  (e) => e.player_id === p.id && e.event_type === 'red_card'
+                ).length;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="p-2.5 rounded-xl bg-pitch-darkest/60 border border-white/5 flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono text-slate-500 text-[10px] w-4">{idx + 1}.</span>
+                      <span className="font-semibold text-white" dir="auto">
+                        {p.name}
+                      </span>
+                      {p.is_captain && (
+                        <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
+                          (C)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      {pGoals > 0 && <span className="text-xs">⚽ {pGoals}</span>}
+                      {pAssists > 0 && <span className="text-xs">👟 {pAssists}</span>}
+                      {pYellow > 0 && <span className="text-xs">🟨 {pYellow}</span>}
+                      {pRed > 0 && <span className="text-xs">🟥 {pRed}</span>}
+                    </div>
                   </div>
-                  {p.is_captain && (
-                    <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
-                      Captain (C)
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -361,54 +329,50 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
               {match.away_team_name} Roster
             </h4>
             <div className="space-y-1.5 text-xs">
-              {awayPlayers.map((p, idx) => (
-                <div
-                  key={p.id}
-                  className="p-2 rounded-lg bg-pitch-darkest/60 flex items-center justify-between"
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono text-slate-500 text-[10px] w-4">{idx + 1}.</span>
-                    <span className="font-semibold text-white" dir="auto">
-                      {p.name}
-                    </span>
+              {awayPlayers.map((p, idx) => {
+                const pGoals = (match.events || []).filter(
+                  (e) => e.player_id === p.id && e.event_type === 'goal' && e.sub_type !== 'own_goal'
+                ).length;
+                const pAssists = (match.events || []).filter(
+                  (e) => (e.player_id === p.id && e.event_type === 'assist') || e.assister_id === p.id
+                ).length;
+                const pYellow = (match.events || []).filter(
+                  (e) => e.player_id === p.id && e.event_type === 'yellow_card'
+                ).length;
+                const pRed = (match.events || []).filter(
+                  (e) => e.player_id === p.id && e.event_type === 'red_card'
+                ).length;
+
+                return (
+                  <div
+                    key={p.id}
+                    className="p-2.5 rounded-xl bg-pitch-darkest/60 border border-white/5 flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className="font-mono text-slate-500 text-[10px] w-4">{idx + 1}.</span>
+                      <span className="font-semibold text-white" dir="auto">
+                        {p.name}
+                      </span>
+                      {p.is_captain && (
+                        <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
+                          (C)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center space-x-1.5">
+                      {pGoals > 0 && <span className="text-xs">⚽ {pGoals}</span>}
+                      {pAssists > 0 && <span className="text-xs">👟 {pAssists}</span>}
+                      {pYellow > 0 && <span className="text-xs">🟨 {pYellow}</span>}
+                      {pRed > 0 && <span className="text-xs">🟥 {pRed}</span>}
+                    </div>
                   </div>
-                  {p.is_captain && (
-                    <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
-                      Captain (C)
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
-
-        {/* Official MVP Highlight */}
-        {match.mvp_player_name && (
-          <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/5 to-transparent border border-amber-500/30">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-xl shadow-glow">
-                ⭐
-              </div>
-              <div>
-                <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <span>Official Man of the Match (MVP)</span>
-                  <span className="text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">AWARD</span>
-                </span>
-                <span className="text-lg font-black text-white" dir="auto">
-                  {match.mvp_player_name}
-                </span>
-              </div>
-            </div>
-            {match.mvp_team_name && (
-              <span className="text-xs font-bold text-slate-300 px-3.5 py-1.5 rounded-xl bg-pitch-darkest border border-white/10" dir="auto">
-                {match.mvp_team_name}
-              </span>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
 }
-
