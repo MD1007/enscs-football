@@ -1,17 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { Match } from '@/lib/types';
 import MatchEventsTimeline from './MatchEventsTimeline';
-import MatchStatisticsView from './MatchStatisticsView';
 import {
   X,
   Shield,
   Calendar,
   MapPin,
   Activity,
-  BarChart3,
   ExternalLink,
   ChevronRight,
 } from 'lucide-react';
@@ -22,8 +20,6 @@ interface MatchDetailModalProps {
 }
 
 export default function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
-  const [activeTab, setActiveTab] = useState<'timeline' | 'stats'>('timeline');
-
   if (!match) return null;
 
   const formattedDate = new Date(match.scheduled_time).toLocaleString('en-US', {
@@ -176,39 +172,17 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
           )}
         </div>
 
-        {/* Modal Tabs Navigation: Timeline vs Stats */}
+        {/* Modal Events Timeline Header */}
         <div className="flex items-center border-b border-white/10 px-5 bg-pitch-darkest/90">
-          <button
-            onClick={() => setActiveTab('timeline')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 transition ${
-              activeTab === 'timeline'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
+          <div className="py-3 px-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 border-emerald-500 text-emerald-400">
             <Activity className="w-3.5 h-3.5" />
-            <span>Timeline</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`py-3 px-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 transition ${
-              activeTab === 'stats'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Statistics</span>
-          </button>
+            <span>Match Events Timeline</span>
+          </div>
         </div>
 
         {/* Modal Content Body */}
         <div className="p-5 sm:p-6 max-h-[50vh] overflow-y-auto">
-          {activeTab === 'timeline' ? (
-            <MatchEventsTimeline match={match} />
-          ) : (
-            <MatchStatisticsView match={match} />
-          )}
+          <MatchEventsTimeline match={match} />
         </div>
 
         {/* Footer Actions */}

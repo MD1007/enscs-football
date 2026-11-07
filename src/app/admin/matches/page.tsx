@@ -49,7 +49,7 @@ function AdminMatchesContent() {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   // Modal active tab
-  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'stats' | 'mvp'>('goals');
+  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'mvp'>('goals');
 
   // Form states for match editor
   const [homeScore, setHomeScore] = useState<string>('0');
@@ -787,18 +787,6 @@ function AdminMatchesContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setModalTab('stats')}
-                className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition ${
-                  modalTab === 'stats'
-                    ? 'border-blue-400 text-blue-400 bg-blue-400/5'
-                    : 'border-transparent text-slate-400 hover:text-white'
-                }`}
-              >
-                <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
-                <span>📊 Match Stats</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setModalTab('mvp')}
                 className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition ${
                   modalTab === 'mvp'
@@ -1161,138 +1149,7 @@ function AdminMatchesContent() {
               </div>
             )}
 
-            {/* TAB 3: MATCH STATISTICS */}
-            {modalTab === 'stats' && (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-pitch-card border border-blue-500/30 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase text-blue-400 flex items-center space-x-1">
-                      <BarChart3 className="w-3.5 h-3.5" />
-                      <span>Official Match Statistics (Optional)</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPossessionHome('');
-                        setPossessionAway('');
-                        setShotsHome('');
-                        setShotsAway('');
-                        setShotsOnTargetHome('');
-                        setShotsOnTargetAway('');
-                        setFoulsHome('');
-                        setFoulsAway('');
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-red-400 transition"
-                    >
-                      Clear All Stats
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Enter match stats if available. If left empty, they will show as N/A or remain hidden on the public site (no fake numbers).
-                  </p>
 
-                  <div className="space-y-2.5 pt-1">
-                    {/* Possession */}
-                    <div className="grid grid-cols-3 items-center gap-2 p-2 rounded-xl bg-pitch-darkest border border-white/5 text-xs">
-                      <input
-                        type="number"
-                        placeholder="%"
-                        min="0"
-                        max="100"
-                        value={possessionHome}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setPossessionHome(val);
-                          if (val !== '' && !isNaN(Number(val))) {
-                            setPossessionAway(Math.max(0, 100 - Number(val)).toString());
-                          }
-                        }}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                      <span className="text-center font-bold text-slate-300">Possession %</span>
-                      <input
-                        type="number"
-                        placeholder="%"
-                        min="0"
-                        max="100"
-                        value={possessionAway}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setPossessionAway(val);
-                          if (val !== '' && !isNaN(Number(val))) {
-                            setPossessionHome(Math.max(0, 100 - Number(val)).toString());
-                          }
-                        }}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                    </div>
-
-                    {/* Total Shots */}
-                    <div className="grid grid-cols-3 items-center gap-2 p-2 rounded-xl bg-pitch-darkest border border-white/5 text-xs">
-                      <input
-                        type="number"
-                        placeholder="Shots"
-                        min="0"
-                        value={shotsHome}
-                        onChange={(e) => setShotsHome(e.target.value)}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                      <span className="text-center font-bold text-slate-300">Total Shots</span>
-                      <input
-                        type="number"
-                        placeholder="Shots"
-                        min="0"
-                        value={shotsAway}
-                        onChange={(e) => setShotsAway(e.target.value)}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                    </div>
-
-                    {/* Shots on Target */}
-                    <div className="grid grid-cols-3 items-center gap-2 p-2 rounded-xl bg-pitch-darkest border border-white/5 text-xs">
-                      <input
-                        type="number"
-                        placeholder="On Target"
-                        min="0"
-                        value={shotsOnTargetHome}
-                        onChange={(e) => setShotsOnTargetHome(e.target.value)}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                      <span className="text-center font-bold text-slate-300">Shots on Target</span>
-                      <input
-                        type="number"
-                        placeholder="On Target"
-                        min="0"
-                        value={shotsOnTargetAway}
-                        onChange={(e) => setShotsOnTargetAway(e.target.value)}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                    </div>
-
-                    {/* Fouls */}
-                    <div className="grid grid-cols-3 items-center gap-2 p-2 rounded-xl bg-pitch-darkest border border-white/5 text-xs">
-                      <input
-                        type="number"
-                        placeholder="Fouls"
-                        min="0"
-                        value={foulsHome}
-                        onChange={(e) => setFoulsHome(e.target.value)}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                      <span className="text-center font-bold text-slate-300">Fouls</span>
-                      <input
-                        type="number"
-                        placeholder="Fouls"
-                        min="0"
-                        value={foulsAway}
-                        onChange={(e) => setFoulsAway(e.target.value)}
-                        className="w-full bg-pitch-card border border-white/10 rounded-lg p-2 text-center text-white font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* TAB 4: MAN OF THE MATCH (MVP) */}
             {modalTab === 'mvp' && (

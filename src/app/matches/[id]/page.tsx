@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getFullTournamentData } from '@/lib/tournamentService';
 import MatchEventsTimeline from '@/components/MatchEventsTimeline';
-import MatchStatisticsView from '@/components/MatchStatisticsView';
 import MatchMVPSpotlight from '@/components/MatchMVPSpotlight';
 import {
   Calendar,
@@ -245,26 +244,7 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
         <MatchEventsTimeline match={match} />
       </div>
 
-      {/* Match Statistics & Comparison */}
-      <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-pitch-border bg-pitch-card/80 space-y-6">
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-              <Award className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-black text-white text-base sm:text-lg uppercase tracking-tight">
-                Match Statistics
-              </h3>
-              <p className="text-xs text-slate-400">
-                In-depth performance breakdown between both squads
-              </p>
-            </div>
-          </div>
-        </div>
 
-        <MatchStatisticsView match={match} />
-      </div>
 
       {/* Team Rosters Side by Side */}
       <div className="space-y-4 pt-2">
