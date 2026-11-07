@@ -228,12 +228,19 @@ export default function AdminPlayersPage() {
                 <tr key={p.id} className="transition hover:bg-white/[0.04]">
                   <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
                   <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
-                    <span>{p.name}</span>
-                    {p.name_ar && p.name_ar !== p.name && (
-                      <span className="text-xs text-slate-400 ml-2 font-ar" dir="rtl">
-                        ({p.name_ar})
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      <span>{p.name}</span>
+                      {p.is_goalkeeper && (
+                        <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
+                          🧤 GK
+                        </span>
+                      )}
+                      {p.name_ar && p.name_ar !== p.name && (
+                        <span className="text-xs text-slate-400 font-ar" dir="rtl">
+                          ({p.name_ar})
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3.5 px-4 text-xs text-slate-300 font-semibold" dir="auto">
                     {p.team_name}
