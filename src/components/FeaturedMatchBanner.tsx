@@ -18,8 +18,8 @@ import {
   Star,
   MapPin,
   Activity,
-  Play,
   ArrowRight,
+  Radio,
 } from 'lucide-react';
 
 interface FeaturedMatchBannerProps {
@@ -76,23 +76,23 @@ export default function FeaturedMatchBanner({ matches, players = [] }: FeaturedM
   return (
     <>
       <section className="space-y-3">
-        {/* Section Header with live pulse */}
-        <div className="flex items-center justify-between">
+        {/* Section Header */}
+        <div className="flex items-center justify-between px-1">
           <div className="flex items-center space-x-2">
             {isLive ? (
-              <span className="flex items-center space-x-1.5 text-xs font-black uppercase tracking-wider text-red-400 bg-red-500/20 px-3 py-1 rounded-full border border-red-500/40 shadow-glow">
+              <span className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-black uppercase tracking-wider text-red-400 bg-red-500/15 px-3 py-1 rounded-full border border-red-500/30 shadow-[0_0_15px_rgba(239,68,68,0.25)]">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                 <span>Live Action Center</span>
               </span>
             ) : isUpcoming ? (
-              <span className="flex items-center space-x-1.5 text-xs font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-3 py-1 rounded-full border border-emerald-500/30">
+              <span className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-3 py-1 rounded-full border border-emerald-500/30">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Next Upcoming Match</span>
               </span>
             ) : (
-              <span className="flex items-center space-x-1.5 text-xs font-black uppercase tracking-wider text-blue-400 bg-blue-500/15 px-3 py-1 rounded-full border border-blue-500/30">
+              <span className="inline-flex items-center space-x-1.5 text-[11px] sm:text-xs font-black uppercase tracking-wider text-blue-400 bg-blue-500/15 px-3 py-1 rounded-full border border-blue-500/30">
                 <Trophy className="w-3.5 h-3.5 text-blue-400" />
-                <span>Latest Matchday Result</span>
+                <span>Latest Match Result</span>
               </span>
             )}
             <span className="hidden sm:inline text-xs text-slate-400">
@@ -109,163 +109,183 @@ export default function FeaturedMatchBanner({ matches, players = [] }: FeaturedM
           </Link>
         </div>
 
-        {/* Featured Spotlight Card */}
+        {/* Pro Stadium Match Card */}
         <div
           onClick={() => setModalOpen(true)}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setModalOpen(true)}
-          className={`group relative glass-panel rounded-3xl p-6 sm:p-8 border transition-all duration-300 cursor-pointer overflow-hidden ${
+          className={`group relative rounded-3xl p-4 sm:p-7 border transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-xl ${
             isLive
-              ? 'border-red-500/50 bg-gradient-to-r from-red-950/40 via-pitch-card to-emerald-950/30 shadow-glow hover:border-red-400'
-              : 'border-emerald-500/40 bg-gradient-to-r from-emerald-950/30 via-pitch-card to-teal-950/30 shadow-glow hover:border-emerald-400'
+              ? 'bg-gradient-to-b from-red-950/40 via-pitch-darkest/95 to-pitch-card/90 border-red-500/50 shadow-[0_0_35px_rgba(239,68,68,0.2)] hover:border-red-400'
+              : 'bg-gradient-to-b from-emerald-950/30 via-pitch-darkest/95 to-pitch-card/90 border-emerald-500/40 shadow-[0_0_35px_rgba(16,185,129,0.15)] hover:border-emerald-400'
           }`}
         >
-          {/* Subtle Ambient Background Lighting */}
+          {/* Subtle Stadium Radial Lighting Glow */}
           <div
-            className={`absolute top-0 right-1/4 w-72 h-72 rounded-full blur-3xl pointer-events-none opacity-20 ${
+            className={`absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-48 rounded-full blur-3xl pointer-events-none opacity-25 ${
               isLive ? 'bg-red-500' : 'bg-emerald-500'
             }`}
           />
 
-          <div className="relative z-10 space-y-6">
-            {/* Top Bar: Stage & Status */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-              <div className="flex items-center space-x-2.5">
-                <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-pitch-darkest border border-white/10 text-emerald-300">
-                  {getStageLabel()}
-                </span>
-                <span className="text-xs text-slate-400 flex items-center space-x-1">
-                  <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{match.venue || 'Terrain ENSCS'}</span>
-                </span>
-              </div>
+          <div className="relative z-10 space-y-4 sm:space-y-5">
+            {/* Top Bar: Group Badge & Timing */}
+            <div className="flex items-center justify-between text-xs border-b border-white/10 pb-3">
+              <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-pitch-darkest/90 border border-white/10 text-emerald-300">
+                {getStageLabel()}
+              </span>
 
-              {isLive ? (
-                <div className="flex items-center space-x-2">
-                  <span className="flex items-center space-x-2 text-xs font-black text-red-300 bg-red-500/30 border border-red-500/50 px-3.5 py-1 rounded-full uppercase tracking-wider animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-red-500" />
-                    <span>LIVE</span>
-                    <LiveMinute match={match} className="font-mono text-white ml-1 font-bold" />
-                  </span>
-                </div>
-              ) : isFinished ? (
-                <span className="text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                  Final Result
-                </span>
-              ) : (
-                <div className="flex items-center space-x-2 text-xs text-slate-300 font-medium">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{formattedDate}</span>
-                  <span className="text-slate-500">•</span>
-                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{match.is_time_set ? formattedTime : 'Time TBD'}</span>
-                </div>
-              )}
+              <div className="flex items-center space-x-2 text-[11px] sm:text-xs text-slate-400">
+                <MapPin className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                <span className="truncate max-w-[130px] sm:max-w-none">{match.venue || 'Terrain ENSCS'}</span>
+                {!isLive && !isFinished && (
+                  <>
+                    <span className="text-slate-600 hidden sm:inline">•</span>
+                    <span className="hidden sm:inline text-slate-300">{formattedDate}</span>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Central Scoreboard / Teams Face-Off */}
-            <div className="grid grid-cols-1 md:grid-cols-7 gap-6 items-center">
-              {/* Home Team (Cols 1-3) */}
-              <div className="md:col-span-3 flex md:flex-row-reverse items-center justify-between md:justify-start gap-4">
+            {/* Stadium Scoreboard: Horizontal Face-Off (Mobile-Perfect) */}
+            <div className="grid grid-cols-7 gap-2 sm:gap-4 items-center py-1 sm:py-2">
+              {/* Home Team (3 cols) */}
+              <div className="col-span-3 flex flex-col items-center text-center space-y-2">
                 <div
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg border border-white/10"
-                  style={{ backgroundColor: match.home_team_color || '#10B981' }}
+                  className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg border border-white/15 relative overflow-hidden group-hover:scale-105 transition-transform"
+                  style={{
+                    background: `radial-gradient(circle at 35% 35%, ${match.home_team_color || '#10B981'}, #052e16)`,
+                    boxShadow: `0 4px 18px ${match.home_team_color ? match.home_team_color + '35' : 'rgba(16,185,129,0.25)'}`,
+                  }}
                 >
-                  <Shield className="w-9 h-9 sm:w-11 sm:h-11 text-white fill-white/20" />
+                  <Shield className="w-8 h-8 sm:w-11 sm:h-11 text-white fill-white/20 drop-shadow" />
                 </div>
-                <div className="md:text-right flex-1 min-w-0">
-                  <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate group-hover:text-emerald-400 transition" dir="auto">
+                <div className="w-full">
+                  <h3
+                    className="font-black text-sm sm:text-xl text-white tracking-tight line-clamp-2 group-hover:text-emerald-400 transition"
+                    dir="auto"
+                  >
                     {match.home_team_name || 'Home Team'}
                   </h3>
                   {isUpcoming && homeForm.length > 0 && (
-                    <div className="mt-2 flex items-center md:justify-end space-x-1.5">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Form:</span>
+                    <div className="mt-1.5 flex items-center justify-center">
                       <FormPills form={homeForm} />
-                    </div>
-                  )}
-                  {/* Goal events preview */}
-                  {(isLive || isFinished) && homeGoals.length > 0 && (
-                    <div className="mt-2 space-y-0.5 text-xs text-slate-300 md:text-right" dir="auto">
-                      {homeGoals.map((g, idx) => (
-                        <div key={idx} className="flex items-center md:justify-end space-x-1 text-[11px]">
-                          <span>⚽ {g.player_name}</span>
-                          <span className="font-mono text-emerald-400">({g.minute}&apos;)</span>
-                        </div>
-                      ))}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Center Match Hub (Col 4) */}
-              <div className="md:col-span-1 text-center py-2 md:py-0 flex flex-col items-center justify-center">
-                {isLive || isFinished ? (
-                  <div className="space-y-1">
-                    <div className="font-mono font-black text-4xl sm:text-6xl text-white tracking-tight flex items-center justify-center space-x-3">
-                      <span className={isLive ? 'text-emerald-400' : 'text-white'}>{match.home_score ?? 0}</span>
-                      <span className="text-slate-600 font-sans">:</span>
-                      <span className={isLive ? 'text-emerald-400' : 'text-white'}>{match.away_score ?? 0}</span>
+              {/* Center Scoreboard / Live Hub (1 col) */}
+              <div className="col-span-1 flex flex-col items-center justify-center">
+                {isLive ? (
+                  <div className="flex flex-col items-center space-y-1">
+                    {/* Live Ticking Minute Badge */}
+                    <span className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-red-500/25 border border-red-500/50 text-red-300 text-[10px] sm:text-xs font-black uppercase tracking-wider animate-pulse whitespace-nowrap shadow-sm">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                      <span>LIVE</span>
+                      <LiveMinute match={match} className="font-mono text-white font-black" />
+                    </span>
+
+                    {/* Big Bold Score */}
+                    <div className="font-mono font-black text-3xl sm:text-5xl text-white tracking-tight flex items-center justify-center space-x-1 sm:space-x-2 py-0.5">
+                      <span className="text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]">
+                        {match.home_score ?? 0}
+                      </span>
+                      <span className="text-slate-600 font-sans font-light">:</span>
+                      <span className="text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]">
+                        {match.away_score ?? 0}
+                      </span>
                     </div>
-                    {match.mvp_player_name && (
-                      <div className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] font-bold">
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        <span>MVP: {match.mvp_player_name}</span>
-                      </div>
-                    )}
+                  </div>
+                ) : isFinished ? (
+                  <div className="flex flex-col items-center space-y-1">
+                    <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
+                      Full Time
+                    </span>
+                    <div className="font-mono font-black text-3xl sm:text-5xl text-white tracking-tight flex items-center justify-center space-x-1 sm:space-x-2">
+                      <span>{match.home_score ?? 0}</span>
+                      <span className="text-slate-600 font-sans">:</span>
+                      <span>{match.away_score ?? 0}</span>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl bg-pitch-darkest border border-emerald-500/40 flex items-center justify-center font-black text-base text-emerald-400 shadow-glow">
+                  <div className="flex flex-col items-center space-y-1">
+                    <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-pitch-darkest to-pitch-card border border-emerald-500/40 flex items-center justify-center font-black text-xs sm:text-sm text-emerald-400 shadow-glow">
                       VS
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Kickoff Upcoming
+                    <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">
+                      {match.is_time_set ? formattedTime : 'Time TBD'}
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* Away Team (Cols 5-7) */}
-              <div className="md:col-span-3 flex items-center justify-between md:justify-start gap-4">
+              {/* Away Team (3 cols) */}
+              <div className="col-span-3 flex flex-col items-center text-center space-y-2">
                 <div
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg border border-white/10"
-                  style={{ backgroundColor: match.away_team_color || '#3B82F6' }}
+                  className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg border border-white/15 relative overflow-hidden group-hover:scale-105 transition-transform"
+                  style={{
+                    background: `radial-gradient(circle at 35% 35%, ${match.away_team_color || '#3B82F6'}, #082f49)`,
+                    boxShadow: `0 4px 18px ${match.away_team_color ? match.away_team_color + '35' : 'rgba(59,130,246,0.25)'}`,
+                  }}
                 >
-                  <Shield className="w-9 h-9 sm:w-11 sm:h-11 text-white fill-white/20" />
+                  <Shield className="w-8 h-8 sm:w-11 sm:h-11 text-white fill-white/20 drop-shadow" />
                 </div>
-                <div className="text-left flex-1 min-w-0">
-                  <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight truncate group-hover:text-emerald-400 transition" dir="auto">
+                <div className="w-full">
+                  <h3
+                    className="font-black text-sm sm:text-xl text-white tracking-tight line-clamp-2 group-hover:text-emerald-400 transition"
+                    dir="auto"
+                  >
                     {match.away_team_name || 'Away Team'}
                   </h3>
                   {isUpcoming && awayForm.length > 0 && (
-                    <div className="mt-2 flex items-center space-x-1.5">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">Form:</span>
+                    <div className="mt-1.5 flex items-center justify-center">
                       <FormPills form={awayForm} />
-                    </div>
-                  )}
-                  {/* Goal events preview */}
-                  {(isLive || isFinished) && awayGoals.length > 0 && (
-                    <div className="mt-2 space-y-0.5 text-xs text-slate-300" dir="auto">
-                      {awayGoals.map((g, idx) => (
-                        <div key={idx} className="flex items-center space-x-1 text-[11px]">
-                          <span>⚽ {g.player_name}</span>
-                          <span className="font-mono text-emerald-400">({g.minute}&apos;)</span>
-                        </div>
-                      ))}
                     </div>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Bottom Bar: Action & Context */}
-            <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="text-xs text-slate-400 flex items-center space-x-2">
+            {/* Match MVP Pill if awarded */}
+            {match.mvp_player_name && (
+              <div className="flex justify-center">
+                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] sm:text-xs font-bold shadow-sm">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span>Man of the Match: {match.mvp_player_name}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Live Goalscorers Timeline (Split 2-Column Preview) */}
+            {(isLive || isFinished) && goalEvents.length > 0 && (
+              <div className="p-2.5 sm:p-3 rounded-2xl bg-pitch-darkest/70 border border-white/5 grid grid-cols-2 gap-3 text-[11px] text-slate-300">
+                <div className="space-y-1 text-left sm:text-center" dir="auto">
+                  {homeGoals.map((g, idx) => (
+                    <div key={idx} className="truncate">
+                      ⚽ <span className="font-semibold">{g.player_name}</span>{' '}
+                      <span className="font-mono text-emerald-400 font-bold">{g.minute}&apos;</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1 text-right sm:text-center" dir="auto">
+                  {awayGoals.map((g, idx) => (
+                    <div key={idx} className="truncate">
+                      ⚽ <span className="font-semibold">{g.player_name}</span>{' '}
+                      <span className="font-mono text-emerald-400 font-bold">{g.minute}&apos;</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Bar & Full-Width Touch Button */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-center text-center text-[11px] sm:text-xs text-slate-400">
                 {isLive ? (
-                  <span className="flex items-center space-x-1 text-emerald-400 font-semibold">
-                    <Activity className="w-4 h-4 animate-pulse" />
-                    <span>Real-time match events & player stats updating live</span>
+                  <span className="inline-flex items-center space-x-1.5 text-emerald-400 font-semibold">
+                    <Activity className="w-3.5 h-3.5 animate-pulse" />
+                    <span>Real-time pitch action & stats updated live</span>
                   </span>
                 ) : mainStake ? (
                   <span className="line-clamp-1 text-slate-300">
@@ -273,16 +293,21 @@ export default function FeaturedMatchBanner({ matches, players = [] }: FeaturedM
                     {mainStake}
                   </span>
                 ) : (
-                  <span>Click to view head-to-head records and match analytics</span>
+                  <span>Tap to open match timeline, head-to-head records & line-ups</span>
                 )}
               </div>
 
+              {/* High-Impact Mobile CTA Button */}
               <button
                 type="button"
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-[0.98] border border-white/15 text-white font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-2 group-hover:border-emerald-500/50"
+                className={`w-full min-h-[48px] sm:min-h-[52px] rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-glow flex items-center justify-center space-x-2 active:scale-[0.98] ${
+                  isLive
+                    ? 'bg-gradient-to-r from-red-500 via-rose-500 to-amber-500 hover:from-red-400 hover:to-amber-400 text-white shadow-[0_0_20px_rgba(239,68,68,0.3)]'
+                    : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+                }`}
               >
-                <span>{isLive ? 'Open Live Center' : isUpcoming ? 'Match Preview & H2H' : 'Match Center'}</span>
-                <ArrowRight className="w-3.5 h-3.5 text-emerald-400 group-hover:translate-x-0.5 transition" />
+                <span>{isLive ? 'Open Live Match Center' : isUpcoming ? 'Match Preview & Analysis' : 'Open Match Center'}</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -300,4 +325,3 @@ export default function FeaturedMatchBanner({ matches, players = [] }: FeaturedM
     </>
   );
 }
-
