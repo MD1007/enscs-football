@@ -6,7 +6,7 @@ import { Match, Player } from '@/lib/types';
 import LiveMinute from './LiveMinute';
 import MatchDetailModal from './MatchDetailModal';
 import { FormPills } from './MatchPreview';
-import { getTeamForm, getMatchStakes } from '@/lib/matchPreview';
+import { getTeamForm, getMatchStakes, getFeaturedMatch } from '@/lib/matchPreview';
 import {
   Calendar,
   Clock,
@@ -25,41 +25,6 @@ import {
 interface FeaturedMatchBannerProps {
   matches: Match[];
   players?: Player[];
-}
-
-export function getFeaturedMatch(matches: Match[]): { match: Match | null; isLive: boolean } {
-  if (!matches || matches.length === 0) return { match: null, isLive: false };
-
-  // 1. Live match takes absolute top priority
-  const liveMatch = matches.find((m) => m.status === 'live');
-  if (liveMatch) {
-    return { match: liveMatch, isLive: true };
-  }
-
-  // 2. Closest upcoming match (sorted by time if set, then matchday / id)
-  const upcomingMatches = matches.filter((m) => m.status === 'upcoming');
-  if (upcomingMatches.length > 0) {
-    const sorted = [...upcomingMatches].sort((a, b) => {
-      const timeA = a.scheduled_time ? new Date(a.scheduled_time).getTime() : Infinity;
-      const timeB = b.scheduled_time ? new Date(b.scheduled_time).getTime() : Infinity;
-      if (a.is_time_set && b.is_time_set) {
-        return timeA - timeB;
-      }
-      if (a.is_time_set && !b.is_time_set) return -1;
-      if (!a.is_time_set && b.is_time_set) return 1;
-      return (a.matchday || 99) - (b.matchday || 99) || a.id - b.id;
-    });
-    return { match: sorted[0], isLive: false };
-  }
-
-  // 3. Fallback: most recently finished match
-  const finishedMatches = matches.filter((m) => m.status === 'finished');
-  if (finishedMatches.length > 0) {
-    const sorted = [...finishedMatches].sort((a, b) => b.id - a.id);
-    return { match: sorted[0], isLive: false };
-  }
-
-  return { match: matches[0] || null, isLive: false };
 }
 
 export default function FeaturedMatchBanner({ matches, players = [] }: FeaturedMatchBannerProps) {
@@ -335,3 +300,4 @@ export default function FeaturedMatchBanner({ matches, players = [] }: FeaturedM
     </>
   );
 }
+

@@ -2,7 +2,8 @@ import React from 'react';
 import Link from 'next/link';
 import { getFullTournamentData } from '@/lib/tournamentService';
 import MatchCard from '@/components/MatchCard';
-import FeaturedMatchBanner, { getFeaturedMatch } from '@/components/FeaturedMatchBanner';
+import FeaturedMatchBanner from '@/components/FeaturedMatchBanner';
+import { getFeaturedMatch } from '@/lib/matchPreview';
 import {
   Trophy,
   Users,
