@@ -37,8 +37,9 @@ git push -u origin main
    - **Start Command**: `npm run start`
    - **Instance Type**: `Free`
 5. Under **Environment Variables**, click **Add Environment Variable**:
-   - Key: `JWT_SECRET`
-   - Value: `@mahdidhmn-enscs-secret-key-2026`
+   - Key: `ADMIN_PASSWORD`
+   - Value: a long private password that you choose (this is the admin login password; never write it in the code)
+   - Optional: `ADMIN_USERNAME` to choose the admin username
 6. Click **Create Web Service**.
 
 🎉 **Done!** Within 2 minutes, Render will give you a public link like:
@@ -79,7 +80,7 @@ Vercel is the official platform by the creators of Next.js. It is lightning-fast
 1. Go to [https://vercel.com](https://vercel.com) and sign in with GitHub.
 2. Click **Add New Project** and import `enscs-football`.
 3. Add the environment variable:
-   - `JWT_SECRET` = `@mahdidhmn-enscs-secret-key-2026`
+   - `ADMIN_PASSWORD` = a long private password that you choose
 4. Click **Deploy**.
 5. You instantly get a clean link like:
    👉 `https://enscs-football.vercel.app`

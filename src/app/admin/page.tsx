@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getAdminSession } from '@/lib/auth';
 import { getFullTournamentData, getActivityLogs } from '@/lib/tournamentService';
 import { getPersistenceStatus } from '@/lib/persistence';
+import { isAdminPasswordPrivate } from '@/lib/db';
 import DiscrepancyBanner from '@/components/DiscrepancyBanner';
 import {
   Trophy,
@@ -30,6 +31,7 @@ export default async function AdminDashboardPage() {
   const data = getFullTournamentData();
   const logs = getActivityLogs(8);
   const storage = getPersistenceStatus();
+  const adminPasswordPrivate = isAdminPasswordPrivate();
 
   const { matches, summary, teams } = data;
 
@@ -44,6 +46,21 @@ export default async function AdminDashboardPage() {
     <div className="space-y-8">
       {/* Discrepancy Notification Banner */}
       <DiscrepancyBanner isResolved={isDiscrepancyResolved} />
+
+      {/* Admin password warning */}
+      {!adminPasswordPrivate && (
+        <div className="p-3.5 rounded-2xl border border-red-500/40 bg-red-500/10 flex items-start space-x-3 text-xs">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-red-300">Admin password is not private yet</p>
+            <p className="text-slate-300">
+              The current password was published in the project&apos;s code history, so anyone could log in. Set a new
+              one as <span className="font-mono">ADMIN_PASSWORD</span> in the server&apos;s Environment settings; the
+              old password stops working as soon as it is saved.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Cloud backup status */}
       {storage.enabled && storage.started && !storage.last_error ? (

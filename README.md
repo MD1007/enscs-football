@@ -72,10 +72,9 @@ The server will start on port `3000` (or the port defined in `process.env.PORT`)
 
 To access the Admin Portal:
 1. Navigate to: `http://localhost:3000/admin` (or click **Admin Portal** in the header).
-2. Use the master credentials:
-   - **Username**: `admin`
-   - **Password**: `admin123`
-*(You can update or hash a custom password in `admin_users` table anytime).*
+2. Log in with the administrator account. The password is never stored in the code: set it with the
+   `ADMIN_PASSWORD` setting (in `.env.local` locally, or in the host's Environment settings online).
+   `ADMIN_USERNAME` is optional.
 
 ---
 

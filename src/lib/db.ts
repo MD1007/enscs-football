@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
 // DATA_DIR lets the database live on a mounted persistent disk if one is ever
@@ -178,11 +179,51 @@ export function applyRosterCorrections() {
   }
 }
 
+/** True when the admin password comes from a private server setting. */
+export function isAdminPasswordPrivate(): boolean {
+  return Boolean(process.env.ADMIN_PASSWORD);
+}
+
+/**
+ * Admin credentials are never written in the source code.
+ *  - ADMIN_PASSWORD set (server setting): it becomes the admin password on every
+ *    start, so any older password stops working. ADMIN_USERNAME is optional.
+ *  - Not set: the admin already stored in the database is left untouched.
+ *  - Not set and no admin exists: a random one-time password is generated and
+ *    printed in the server log.
+ */
+function ensureAdminUser() {
+  const existing = db.prepare('SELECT id, username, password_hash FROM admin_users ORDER BY id LIMIT 1').get() as
+    | { id: number; username: string; password_hash: string }
+    | undefined;
+
+  const envPassword = process.env.ADMIN_PASSWORD;
+  if (envPassword) {
+    const username = (process.env.ADMIN_USERNAME || '').trim() || existing?.username || 'admin';
+    const upToDate =
+      existing && existing.username === username && bcrypt.compareSync(envPassword, existing.password_hash);
+    if (!upToDate) {
+      const hash = bcrypt.hashSync(envPassword, bcrypt.genSaltSync(10));
+      db.transaction(() => {
+        db.prepare('DELETE FROM admin_users').run();
+        db.prepare('INSERT INTO admin_users (id, username, password_hash) VALUES (1, ?, ?)').run(username, hash);
+      })();
+    }
+    return;
+  }
+
+  if (!existing) {
+    const generated = crypto.randomBytes(12).toString('base64url');
+    const hash = bcrypt.hashSync(generated, bcrypt.genSaltSync(10));
+    db.prepare('INSERT INTO admin_users (id, username, password_hash) VALUES (1, ?, ?)').run('admin', hash);
+    console.warn(
+      `[auth] No ADMIN_PASSWORD set and no admin existed. Created user "admin" with one-time password: ${generated}`
+    );
+  }
+}
+
 function seedInitialData() {
-  // Check if admin user exists
-  const salt = bcrypt.genSaltSync(10);
-  const hash = bcrypt.hashSync('@mahdidhmn', salt);
-  db.prepare('INSERT OR REPLACE INTO admin_users (id, username, password_hash) VALUES (1, ?, ?)').run('MAHDIDHMN', hash);
+  ensureAdminUser();
 
   // Check if settings exist
   const settingsCount = db.prepare('SELECT count(*) as count FROM tournament_settings').get() as { count: number };
