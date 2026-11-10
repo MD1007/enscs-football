@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { getFullTournamentData } from '@/lib/tournamentService';
 import MatchCard from '@/components/MatchCard';
+import FeaturedMatchBanner, { getFeaturedMatch } from '@/components/FeaturedMatchBanner';
 import {
   Trophy,
   Users,
@@ -32,8 +33,11 @@ export default function HomePage() {
     summary,
   } = data;
 
+  const { match: featuredMatch } = getFeaturedMatch(matches);
+
+  // Other upcoming matches (excluding the spotlight match to avoid duplication)
   const upcomingMatches = matches
-    .filter((m) => m.status === 'upcoming' || m.status === 'live')
+    .filter((m) => (m.status === 'upcoming' || m.status === 'live') && m.id !== featuredMatch?.id)
     .slice(0, 4);
 
   const recentResults = matches
@@ -132,35 +136,33 @@ export default function HomePage() {
 
       {/* Main Content Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-16">
-        {/* Upcoming Fixtures Section */}
-        <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Match Schedule</span>
-              <h2 className="text-2xl font-black text-white tracking-tight uppercase">Upcoming Matches</h2>
-            </div>
-            <Link
-              href="/matches"
-              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition flex items-center space-x-1"
-            >
-              <span>Full Schedule</span>
-              <ChevronRight className="w-4 h-4" />
-            </Link>
-          </div>
+        {/* MATCHDAY SPOTLIGHT: Live Match (Priority) or Closest Upcoming Match */}
+        <FeaturedMatchBanner matches={matches} players={data.players} />
 
-          {upcomingMatches.length === 0 ? (
-            <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-pitch-border">
-              <Calendar className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-              <p className="text-sm font-semibold">No upcoming matches scheduled at this moment.</p>
+        {/* Other Upcoming Fixtures Section */}
+        {upcomingMatches.length > 0 && (
+          <section className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Match Schedule</span>
+                <h2 className="text-2xl font-black text-white tracking-tight uppercase">More Upcoming Matches</h2>
+              </div>
+              <Link
+                href="/matches"
+                className="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition flex items-center space-x-1"
+              >
+                <span>Full Schedule</span>
+                <ChevronRight className="w-4 h-4" />
+              </Link>
             </div>
-          ) : (
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {upcomingMatches.map((match) => (
-                <MatchCard key={match.id} match={match} />
+                <MatchCard key={match.id} match={match} allMatches={matches} allPlayers={data.players} />
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        )}
 
         {/* Group Leaders & Golden Boot Spotlight */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
