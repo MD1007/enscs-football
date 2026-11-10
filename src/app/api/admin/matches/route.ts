@@ -40,6 +40,23 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
     }
 
+    // Stopwatch-only action: stores the pitch-side clock so every visitor sees the live minute.
+    if (action === 'clock') {
+      const exists = db.prepare('SELECT id FROM matches WHERE id = ?').get(Number(match_id));
+      if (!exists) {
+        return NextResponse.json({ error: 'Match not found' }, { status: 404 });
+      }
+      const running = Boolean(body.running);
+      const elapsed = Math.max(0, Math.min(Number(body.elapsed_ms) || 0, 6 * 60 * 60 * 1000));
+      const now = Date.now();
+      db.prepare(
+        'UPDATE matches SET clock_running = ?, clock_started_at = ?, clock_accumulated_ms = ? WHERE id = ?'
+      ).run(running ? 1 : 0, running ? now : null, Math.round(elapsed), Number(match_id));
+      // Not an audit-log event, but it must still reach the cloud backup.
+      (globalThis as unknown as { __enscsBackupSoon?: () => void }).__enscsBackupSoon?.();
+      return NextResponse.json({ success: true, server_time: now });
+    }
+
     // Schedule-only action
     if (action === 'schedule') {
       if (!scheduled_time) {

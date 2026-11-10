@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Match } from '@/lib/types';
+import { Match, Player } from '@/lib/types';
 import MatchEventsTimeline from './MatchEventsTimeline';
+import MatchPreview from './MatchPreview';
+import LiveMinute from './LiveMinute';
 import {
   X,
   Shield,
@@ -17,10 +19,45 @@ import {
 interface MatchDetailModalProps {
   match: Match | null;
   onClose: () => void;
+  /** All matches and players, when the page already has them (used by the pre-match preview). */
+  context?: { matches: Match[]; players: Player[] } | null;
 }
 
-export default function MatchDetailModal({ match, onClose }: MatchDetailModalProps) {
+export default function MatchDetailModal({ match, onClose, context }: MatchDetailModalProps) {
+  const isPreview = Boolean(match) && match!.status !== 'finished' && match!.status !== 'live';
+
+  // The preview needs every match and player; use what the page already has, else fetch once.
+  const [fetched, setFetched] = useState<{ matches: Match[]; players: Player[] } | null>(null);
+  const [previewError, setPreviewError] = useState(false);
+  const needsFetch = isPreview && !context;
+
+  useEffect(() => {
+    if (!needsFetch) return;
+    let cancelled = false;
+    fetch('/api/tournament', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setFetched({ matches: data.matches || [], players: data.players || [] });
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsFetch]);
+
+  // Close with the Escape key.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   if (!match) return null;
+  const previewData = context || fetched;
 
   const formattedDate = new Date(match.scheduled_time).toLocaleString('en-US', {
     weekday: 'short',
@@ -52,8 +89,13 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn flex min-h-full items-start sm:items-center justify-center">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn flex min-h-full items-start sm:items-center justify-center"
+      onClick={onClose}
+    >
       <div
+        role="dialog"
+        aria-modal="true"
         className="relative w-full max-w-2xl bg-pitch-darkest border border-pitch-border rounded-3xl shadow-2xl overflow-hidden my-4 sm:my-auto"
         onClick={(e) => e.stopPropagation()}
       >
@@ -86,6 +128,7 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
             >
               {match.status}
             </span>
+            <LiveMinute match={match} className="font-mono font-black text-sm text-red-300" />
           </div>
 
           {/* Teams and Score Display */}
@@ -172,17 +215,30 @@ export default function MatchDetailModal({ match, onClose }: MatchDetailModalPro
           )}
         </div>
 
-        {/* Modal Events Timeline Header */}
+        {/* Modal section header */}
         <div className="flex items-center border-b border-white/10 px-5 bg-pitch-darkest/90">
           <div className="py-3 px-4 text-xs font-bold uppercase tracking-wider flex items-center space-x-2 border-b-2 border-emerald-500 text-emerald-400">
             <Activity className="w-3.5 h-3.5" />
-            <span>Match Events Timeline</span>
+            <span>{isPreview ? 'Match Preview' : 'Match Events Timeline'}</span>
           </div>
         </div>
 
         {/* Modal Content Body */}
-        <div className="p-5 sm:p-6 max-h-[50vh] overflow-y-auto">
-          <MatchEventsTimeline match={match} />
+        <div className="p-4 sm:p-6 max-h-[55vh] overflow-y-auto overscroll-contain">
+          {isPreview ? (
+            previewData ? (
+              <MatchPreview match={match} matches={previewData.matches} players={previewData.players} />
+            ) : previewError ? (
+              <p className="text-sm text-slate-400 text-center py-8">Could not load the preview. Please try again.</p>
+            ) : (
+              <div className="text-center py-10 text-slate-400">
+                <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-xs">Loading preview...</p>
+              </div>
+            )
+          ) : (
+            <MatchEventsTimeline match={match} />
+          )}
         </div>
 
         {/* Footer Actions */}

@@ -108,6 +108,10 @@ export interface Match {
   shots_on_target_away?: number | null;
   fouls_home?: number | null;
   fouls_away?: number | null;
+  // Live stopwatch (server time, epoch ms)
+  clock_started_at?: number | null;
+  clock_accumulated_ms?: number | null;
+  clock_running?: number | boolean | null;
   events?: MatchEvent[];
 }
 
@@ -246,6 +250,8 @@ export interface TournamentAwardsState {
 }
 
 export interface TournamentData {
+  /** Server clock (epoch ms) when the data was produced; used to sync live match minutes. */
+  server_time?: number;
   teams: Team[];
   players: Player[];
   matches: Match[];

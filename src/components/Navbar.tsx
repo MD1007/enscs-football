@@ -37,6 +37,7 @@ export default function Navbar({ nextMatchTime }: NavbarProps) {
     { label: 'Knockout Stage', href: '/knockout', icon: GitBranch },
     { label: 'Top Scorers', href: '/scorers', icon: Flame },
     { label: 'Top Assists', href: '/assists', icon: Award },
+    { label: 'G+A', href: '/contributions', icon: Flame },
     { label: 'MVPs', href: '/mvps', icon: Crown },
     { label: 'Cards', href: '/cards', icon: ShieldAlert },
     { label: 'Teams & Players', href: '/teams', icon: Users },

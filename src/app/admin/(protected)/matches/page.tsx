@@ -1,10 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Match, Team, Player, MatchEvent } from '@/lib/types';
 import { calculateMatchMVP } from '@/lib/calculations';
+import { useMatchClock } from '@/lib/useMatchClock';
+import { ClockState, formatClock, serverNowEstimate, syncServerTime } from '@/lib/liveClock';
 import {
+  Play,
+  Pause,
+  Square,
+  Undo2,
+  Timer,
+  RotateCcw,
   Calendar,
   Save,
   Plus,
@@ -113,17 +121,29 @@ function AdminMatchesContent() {
   const [scheduleVenue, setScheduleVenue] = useState<string>('Terrain ENSCS');
   const [savingSchedule, setSavingSchedule] = useState(false);
 
+  // Minute fields follow the stopwatch until the admin types a value by hand.
+  const [goalMinuteEdited, setGoalMinuteEdited] = useState(false);
+  const [cardMinuteEdited, setCardMinuteEdited] = useState(false);
+
+  // While a match is live, every change is published automatically.
+  const [autoSaveTick, setAutoSaveTick] = useState(0);
+  const [lastPublishedAt, setLastPublishedAt] = useState<Date | null>(null);
+  const autoOpenedRef = useRef(false);
+
   const fetchTournamentData = () => {
-    fetch('/api/tournament')
+    fetch('/api/tournament', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
+        syncServerTime(data.server_time);
         setMatches(data.matches || []);
         setTeams(data.teams || []);
         setPlayers(data.players || []);
         setLoading(false);
 
-        // If URL has match_id, automatically open it
-        if (initialMatchId) {
+        // If URL has match_id, automatically open it (once, so later refreshes
+        // never reset what the admin is typing)
+        if (initialMatchId && !autoOpenedRef.current) {
+          autoOpenedRef.current = true;
           const target = (data.matches || []).find((m: Match) => m.id === Number(initialMatchId));
           if (target) openMatchEditor(target);
         }
@@ -233,6 +253,7 @@ function AdminMatchesContent() {
       setGoalPlayerId(homeTeamPlayers[0].id);
     }
     setGoalMinute('');
+    setGoalMinuteEdited(false);
     setGoalAssisterId('');
     setGoalType('normal');
 
@@ -241,10 +262,48 @@ function AdminMatchesContent() {
       setCardPlayerId(homeTeamPlayers[0].id);
     }
     setCardMinute('');
+    setCardMinuteEdited(false);
     setCardType('yellow_card');
 
     setModalTab('goals');
     setFeedback(null);
+    setLastPublishedAt(null);
+  };
+
+  // ---------------------------------------------------------------- stopwatch
+
+  // Clock last saved on the server, converted to this device's time. Used only
+  // when this device has no stored clock (e.g. the admin switched phones).
+  const serverClockFallback = useMemo<ClockState | null>(() => {
+    if (!editingMatch || editingMatch.status !== 'live') return null;
+    const running = Boolean(editingMatch.clock_running);
+    const accumulatedMs = editingMatch.clock_accumulated_ms || 0;
+    if (!running && accumulatedMs <= 0) return null;
+    const startedAt =
+      running && editingMatch.clock_started_at
+        ? Date.now() - Math.max(0, serverNowEstimate() - editingMatch.clock_started_at)
+        : null;
+    return { running: running && startedAt !== null, startedAt, accumulatedMs };
+  }, [editingMatch]);
+
+  const matchClock = useMatchClock(editingMatch ? editingMatch.id : null, serverClockFallback);
+
+  // Minute shown in the event forms: typed value, else the running match minute.
+  const autoMinute = matchClock.hasStarted ? String(Math.min(matchClock.minute, 130)) : '';
+  const goalMinuteValue = goalMinuteEdited ? goalMinute : autoMinute;
+  const cardMinuteValue = cardMinuteEdited ? cardMinute : autoMinute;
+
+  const requestAutoSave = () => {
+    if (status === 'live') setAutoSaveTick((t) => t + 1);
+  };
+
+  // Tells the server about the clock so the public site shows the live minute.
+  const pushClock = (matchId: number, running: boolean, elapsed: number) => {
+    fetch('/api/admin/matches', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'clock', match_id: matchId, running, elapsed_ms: Math.round(elapsed) }),
+    }).catch((err) => console.error('Clock sync failed:', err));
   };
 
   // Players eligible for goal registration (based on goalTeamId)
@@ -295,7 +354,7 @@ function AdminMatchesContent() {
       event_type: 'goal' as const,
       sub_type: goalType,
       assister_id: goalAssisterId ? Number(goalAssisterId) : null,
-      minute: goalMinute ? parseInt(goalMinute) : null,
+      minute: goalMinuteValue ? parseInt(goalMinuteValue) : null,
       player_name: scorer?.name || 'Player',
       team_name: team?.name || 'Team',
       assister_name: assister?.name || undefined,
@@ -320,8 +379,10 @@ function AdminMatchesContent() {
 
     setEvents((prev) => [...prev, newEv]);
     setGoalMinute('');
+    setGoalMinuteEdited(false);
     setGoalAssisterId('');
     setGoalType('normal');
+    requestAutoSave();
   };
 
   // REMOVE EVENT HANDLER: Automatically subtracts goal from score if deleting a goal!
@@ -351,6 +412,31 @@ function AdminMatchesContent() {
       copy.splice(index, 1);
       return copy;
     });
+    requestAutoSave();
+  };
+
+  // UNDO: removes the most recently added event and reverses its effect on the score.
+  const describeEvent = (ev: (typeof events)[number]) => {
+    const icon =
+      ev.event_type === 'goal'
+        ? ev.sub_type === 'own_goal'
+          ? '⚠️ Own goal'
+          : '⚽ Goal'
+        : ev.event_type === 'yellow_card'
+        ? '🟨 Yellow card'
+        : ev.event_type === 'red_card'
+        ? '🟥 Red card'
+        : '👟 Assist';
+    return `${icon}${ev.minute ? ` ${ev.minute}'` : ''} · ${ev.player_name || 'Player'}`;
+  };
+
+  const lastEvent = events.length > 0 ? events[events.length - 1] : null;
+
+  const handleUndoLastEvent = () => {
+    if (!lastEvent) return;
+    const label = describeEvent(lastEvent);
+    handleRemoveEvent(events.length - 1);
+    setFeedback({ type: 'success', message: `Undone: ${label}` });
   };
 
   // ADD CARD HANDLER
@@ -369,20 +455,27 @@ function AdminMatchesContent() {
       event_type: cardType,
       sub_type: null,
       assister_id: null,
-      minute: cardMinute ? parseInt(cardMinute) : null,
+      minute: cardMinuteValue ? parseInt(cardMinuteValue) : null,
       player_name: player?.name || 'Player',
       team_name: team?.name || 'Team',
     };
 
     setEvents((prev) => [...prev, newEv]);
     setCardMinute('');
+    setCardMinuteEdited(false);
+    requestAutoSave();
   };
 
   // SAVE RESULT & PUBLISH
-  const handleSaveResult = async () => {
-    if (!editingMatch) return;
-    setSaving(true);
-    setFeedback(null);
+  // `statusOverride` lets Start Match / Full Time save with the new status at once.
+  // `silent` is used by the automatic live publishing (no banner, just a timestamp).
+  const handleSaveResult = async (opts?: { statusOverride?: string; silent?: boolean; successMessage?: string }) => {
+    if (!editingMatch) return false;
+    const silent = Boolean(opts?.silent);
+    if (!silent) {
+      setSaving(true);
+      setFeedback(null);
+    }
 
     try {
       const payload = {
@@ -391,7 +484,7 @@ function AdminMatchesContent() {
         away_score: parseInt(awayScore) || 0,
         home_penalties: homePenalties !== '' ? parseInt(homePenalties) : null,
         away_penalties: awayPenalties !== '' ? parseInt(awayPenalties) : null,
-        status: status,
+        status: opts?.statusOverride || status,
         mvp_mode: mvpMode,
         mvp_player_id: mvpMode === 'manual' ? mvpPlayerId : null,
         possession_home: possessionHome !== '' ? parseInt(possessionHome) : null,
@@ -424,16 +517,83 @@ function AdminMatchesContent() {
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || 'Failed to save match');
 
-      setFeedback({
-        type: 'success',
-        message: 'Match result, statistics, and MVP saved successfully! Standings and leaderboards updated.',
-      });
+      setLastPublishedAt(new Date());
+      if (!silent) {
+        setFeedback({
+          type: 'success',
+          message:
+            opts?.successMessage ||
+            'Match result, statistics, and MVP saved successfully! Standings and leaderboards updated.',
+        });
+      }
       fetchTournamentData();
+      return true;
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Error saving match' });
+      setFeedback({
+        type: 'error',
+        message: `${silent ? 'Live update was NOT published: ' : ''}${err.message || 'Error saving match'}`,
+      });
+      return false;
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
+  };
+
+  // Automatic live publishing: shortly after any change during a live match.
+  const saveRef = useRef(handleSaveResult);
+  saveRef.current = handleSaveResult;
+  useEffect(() => {
+    if (!autoSaveTick) return;
+    const id = setTimeout(() => {
+      void saveRef.current({ silent: true });
+    }, 700);
+    return () => clearTimeout(id);
+  }, [autoSaveTick]);
+
+  // STOPWATCH CONTROLS
+  const handleStartMatch = () => {
+    if (!editingMatch) return;
+    matchClock.start();
+    pushClock(editingMatch.id, true, 0);
+    setStatus('live');
+    void handleSaveResult({
+      statusOverride: 'live',
+      successMessage: 'Kick-off! The match is LIVE and every goal or card you add is published automatically.',
+    });
+  };
+
+  const handlePauseClock = () => {
+    if (!editingMatch) return;
+    const next = matchClock.pause();
+    pushClock(editingMatch.id, false, next.accumulatedMs);
+  };
+
+  const handleResumeClock = () => {
+    if (!editingMatch) return;
+    const next = matchClock.resume();
+    pushClock(editingMatch.id, true, next.accumulatedMs);
+  };
+
+  const handleResetClock = () => {
+    if (!editingMatch) return;
+    if (!confirm('Reset the stopwatch to 00:00? Goals and cards already added are kept.')) return;
+    matchClock.reset();
+    pushClock(editingMatch.id, false, 0);
+  };
+
+  const handleFullTime = () => {
+    if (!editingMatch) return;
+    const summary = `${editingMatch.home_team_name || 'Home'} ${parseInt(homeScore) || 0} - ${parseInt(awayScore) || 0} ${
+      editingMatch.away_team_name || 'Away'
+    }`;
+    if (!confirm(`End the match and publish the final result?\n\n${summary}`)) return;
+    matchClock.reset();
+    pushClock(editingMatch.id, false, 0);
+    setStatus('finished');
+    void handleSaveResult({
+      statusOverride: 'finished',
+      successMessage: `Full time! Final result published: ${summary}. Standings and leaderboards updated.`,
+    });
   };
 
   const filteredMatches = matches.filter((m) => {
@@ -623,6 +783,19 @@ function AdminMatchesContent() {
                   {editingMatch.home_team_name || 'TBD'} vs {editingMatch.away_team_name || 'TBD'}
                 </h3>
               </div>
+              {matchClock.hasStarted && (
+                <span
+                  className={`ml-auto mr-2 flex-shrink-0 font-mono font-black text-sm sm:text-base px-2.5 py-1 rounded-lg border tabular-nums ${
+                    matchClock.running
+                      ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                      : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                  }`}
+                  aria-label="Match clock"
+                >
+                  {matchClock.running ? '● ' : '⏸ '}
+                  {formatClock(matchClock.elapsed)}
+                </span>
+              )}
               <button
                 onClick={() => setEditingMatch(null)}
                 className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -760,6 +933,143 @@ function AdminMatchesContent() {
               </div>
             </div>
 
+            {/* PITCH-SIDE STOPWATCH */}
+            <div
+              className={`p-4 rounded-2xl border space-y-3 ${
+                matchClock.running
+                  ? 'bg-red-950/30 border-red-500/40'
+                  : matchClock.hasStarted
+                  ? 'bg-amber-950/20 border-amber-500/40'
+                  : 'bg-pitch-card border-pitch-border'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                  <Timer className="w-4 h-4 text-emerald-400" />
+                  <span>Pitch-side Stopwatch</span>
+                </span>
+                <span
+                  className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                    matchClock.running
+                      ? 'bg-red-500 text-white border-red-400 animate-pulse'
+                      : matchClock.hasStarted
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : status === 'finished'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : 'bg-slate-700 text-slate-300 border-slate-600'
+                  }`}
+                >
+                  {matchClock.running ? 'Live' : matchClock.hasStarted ? 'Paused' : status === 'finished' ? 'Full time' : 'Not started'}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="text-center sm:text-left sm:pr-4">
+                  <div
+                    className={`font-mono font-black text-5xl sm:text-6xl leading-none tabular-nums ${
+                      matchClock.running ? 'text-white' : matchClock.hasStarted ? 'text-amber-300' : 'text-slate-500'
+                    }`}
+                    aria-live="off"
+                  >
+                    {formatClock(matchClock.elapsed)}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-1.5">
+                    {matchClock.hasStarted ? (
+                      <>
+                        New events are stamped <span className="font-mono font-bold text-emerald-400">{autoMinute}&apos;</span>
+                      </>
+                    ) : (
+                      'Start the clock at kick-off: minutes fill in by themselves.'
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 grid grid-cols-2 gap-2">
+                  {!matchClock.hasStarted ? (
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={handleStartMatch}
+                      className="col-span-2 min-h-[56px] rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.99] text-pitch-darkest font-black text-sm uppercase tracking-wider shadow-glow transition flex items-center justify-center space-x-2 disabled:opacity-50"
+                    >
+                      <Play className="w-5 h-5 fill-current" />
+                      <span>{status === 'finished' ? 'Restart Match (Live)' : 'Start Match'}</span>
+                    </button>
+                  ) : (
+                    <>
+                      {matchClock.running ? (
+                        <button
+                          type="button"
+                          onClick={handlePauseClock}
+                          className="min-h-[52px] rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-[0.98] border border-amber-500/50 text-amber-200 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5"
+                        >
+                          <Pause className="w-4 h-4 fill-current" />
+                          <span>Pause</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleResumeClock}
+                          className="min-h-[52px] rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 active:scale-[0.98] border border-emerald-500/50 text-emerald-200 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>Resume</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={handleFullTime}
+                        className="min-h-[52px] rounded-xl bg-red-500/20 hover:bg-red-500/30 active:scale-[0.98] border border-red-500/50 text-red-200 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                      >
+                        <Square className="w-4 h-4 fill-current" />
+                        <span>Full Time</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Undo + live publishing status */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  disabled={!lastEvent}
+                  onClick={handleUndoLastEvent}
+                  className="min-h-[48px] px-4 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] border border-white/15 text-white font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+                >
+                  <Undo2 className="w-4 h-4" />
+                  <span>Undo Last Event</span>
+                </button>
+                <div className="flex-1 min-w-0 text-[11px] text-slate-400">
+                  {lastEvent ? (
+                    <span className="block truncate" dir="auto">
+                      Last: <span className="text-slate-200 font-semibold">{describeEvent(lastEvent)}</span>
+                    </span>
+                  ) : (
+                    <span>No events yet.</span>
+                  )}
+                  {status === 'live' && (
+                    <span className="block text-emerald-400/90">
+                      {lastPublishedAt
+                        ? `Published live at ${lastPublishedAt.toLocaleTimeString('en-GB')}`
+                        : 'Live: changes publish automatically'}
+                    </span>
+                  )}
+                </div>
+                {matchClock.hasStarted && (
+                  <button
+                    type="button"
+                    onClick={handleResetClock}
+                    className="min-h-[44px] px-3 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 text-[11px] font-bold transition flex items-center justify-center space-x-1 flex-shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset clock</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* MATCH CENTER TABS */}
             <div className="flex border-b border-white/10 overflow-x-auto no-scrollbar gap-2">
               <button
@@ -881,16 +1191,36 @@ function AdminMatchesContent() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                        3. Minute
+                      <label className="flex items-center justify-between text-[10px] font-bold uppercase text-slate-400 mb-1">
+                        <span>3. Minute</span>
+                        {matchClock.hasStarted &&
+                          (goalMinuteEdited ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setGoalMinute('');
+                                setGoalMinuteEdited(false);
+                              }}
+                              className="text-emerald-400 font-black underline"
+                            >
+                              use clock
+                            </button>
+                          ) : (
+                            <span className="text-emerald-400 font-black">auto</span>
+                          ))}
                       </label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
-                        max="120"
+                        max="130"
                         placeholder="e.g. 23"
-                        value={goalMinute}
-                        onChange={(e) => setGoalMinute(e.target.value)}
+                        value={goalMinuteValue}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          setGoalMinute(e.target.value);
+                          setGoalMinuteEdited(true);
+                        }}
                         className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white text-center font-mono focus:outline-none focus:border-emerald-500 min-h-[44px]"
                       />
                     </div>
@@ -1076,12 +1406,20 @@ function AdminMatchesContent() {
                     {/* Minute & Button */}
                     <div className="flex items-end space-x-2">
                       <div className="w-16">
-                        <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Min'</label>
+                        <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                          Min&apos;{' '}
+                          {matchClock.hasStarted && !cardMinuteEdited && <span className="text-emerald-400">auto</span>}
+                        </label>
                         <input
                           type="number"
+                          inputMode="numeric"
                           placeholder="45"
-                          value={cardMinute}
-                          onChange={(e) => setCardMinute(e.target.value)}
+                          value={cardMinuteValue}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            setCardMinute(e.target.value);
+                            setCardMinuteEdited(true);
+                          }}
                           className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-center text-white font-mono min-h-[44px]"
                         />
                       </div>
@@ -1319,7 +1657,7 @@ function AdminMatchesContent() {
               <button
                 type="button"
                 disabled={saving}
-                onClick={handleSaveResult}
+                onClick={() => handleSaveResult()}
                 className="px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2 disabled:opacity-50 min-h-[44px]"
               >
                 <Save className="w-4 h-4" />

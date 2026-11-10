@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { getFullTournamentData } from '@/lib/tournamentService';
+import StatsTabs from '@/components/StatsTabs';
 import { Flame, Trophy, Award, Shield } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,8 @@ export default function ScorersPage() {
           Official ranking of the most prolific strikers in the ENSCS Football Tournament. Automatically tallied from official match events.
         </p>
       </div>
+
+      <StatsTabs active="goals" />
 
       {/* Leading Scorer Spotlight */}
       {leader && (

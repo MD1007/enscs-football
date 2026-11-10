@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { getFullTournamentData } from '@/lib/tournamentService';
+import StatsTabs from '@/components/StatsTabs';
 import { Award, Trophy, Shield } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +22,8 @@ export default function AssistsPage() {
           Tournament playmakers providing decisive goal assists for their teammates.
         </p>
       </div>
+
+      <StatsTabs active="assists" />
 
       {/* Leading Assister Spotlight */}
       {leader && (

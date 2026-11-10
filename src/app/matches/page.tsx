@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import MatchCard from '@/components/MatchCard';
-import { Match, GroupId } from '@/lib/types';
+import { Match, Player, GroupId } from '@/lib/types';
+import { syncServerTime } from '@/lib/liveClock';
 import { Calendar, Filter, Search } from 'lucide-react';
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
   const [selectedMatchday, setSelectedMatchday] = useState<string>('all');
@@ -17,7 +19,9 @@ export default function MatchesPage() {
     fetch('/api/tournament')
       .then((res) => res.json())
       .then((data) => {
+        syncServerTime(data.server_time);
         setMatches(data.matches || []);
+        setPlayers(data.players || []);
         setLoading(false);
       })
       .catch((err) => {
@@ -85,7 +89,7 @@ export default function MatchesPage() {
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Fixtures & Results</span>
           <h1 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">Tournament Matches</h1>
           <p className="text-sm text-slate-400 max-w-2xl">
-            Follow all 18 group matches and upcoming knockout ties. Click any finished match card to see the full timeline including goalscorers, assists, and disciplinary cards.
+            Follow all 18 group matches and upcoming knockout ties. Tap a finished match for its full timeline, or an upcoming one for the preview: form guide, head-to-head, star players and what is at stake.
           </p>
         </div>
 
@@ -191,7 +195,7 @@ export default function MatchesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredMatches.map((match) => (
-            <MatchCard key={match.id} match={match} />
+            <MatchCard key={match.id} match={match} allMatches={matches} allPlayers={players} />
           ))}
         </div>
       )}

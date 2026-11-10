@@ -123,6 +123,10 @@ export function initDatabase() {
     'ALTER TABLE teams ADD COLUMN goalkeeper_id INTEGER',
     'ALTER TABLE players ADD COLUMN position TEXT DEFAULT "Attacker"',
     'ALTER TABLE players ADD COLUMN is_goalkeeper INTEGER DEFAULT 0',
+    // Live match stopwatch (server time, epoch ms)
+    'ALTER TABLE matches ADD COLUMN clock_started_at INTEGER',
+    'ALTER TABLE matches ADD COLUMN clock_accumulated_ms INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN clock_running INTEGER DEFAULT 0',
   ];
 
   for (const sql of migrations) {

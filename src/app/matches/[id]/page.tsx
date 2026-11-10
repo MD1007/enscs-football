@@ -4,6 +4,9 @@ import { notFound } from 'next/navigation';
 import { getFullTournamentData } from '@/lib/tournamentService';
 import MatchEventsTimeline from '@/components/MatchEventsTimeline';
 import MatchMVPSpotlight from '@/components/MatchMVPSpotlight';
+import MatchPreview from '@/components/MatchPreview';
+import LiveMinute from '@/components/LiveMinute';
+import ShareButton from '@/components/ShareButton';
 import {
   Calendar,
   Clock,
@@ -65,6 +68,25 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
         return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
     }
   };
+
+  const isUpcomingMatch = match.status !== 'finished' && match.status !== 'live';
+  const stageShort =
+    match.stage === 'group'
+      ? `Group ${match.group_id}`
+      : match.stage === 'semi_final'
+      ? 'Semi-Final'
+      : match.stage === 'third_place'
+      ? '3rd Place Match'
+      : 'Final';
+  const fixture = `${match.home_team_name || 'TBD'} vs ${match.away_team_name || 'TBD'}`;
+  const scoreline = `${match.home_team_name || 'TBD'} ${match.home_score ?? 0}-${match.away_score ?? 0} ${match.away_team_name || 'TBD'}`;
+  const shareTitle = isUpcomingMatch ? fixture : scoreline;
+  const shareText =
+    match.status === 'finished'
+      ? `⚽ FULL TIME · ${scoreline} (${stageShort})${match.mvp_player_name ? `\n⭐ MVP: ${match.mvp_player_name}` : ''}\nENSCS Football Tournament`
+      : match.status === 'live'
+      ? `🔴 LIVE · ${scoreline} (${stageShort})\nENSCS Football Tournament`
+      : `📅 ${fixture} (${stageShort})${match.is_time_set ? `\n${formattedDate}` : ''}\nENSCS Football Tournament`;
 
   const getStageTitle = () => {
     if (match.stage === 'group') return `Group ${match.group_id} • Matchday ${match.matchday || 1}`;
@@ -131,6 +153,11 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
           >
             {match.status}
           </span>
+          <LiveMinute
+            match={match}
+            serverNow={Date.now()}
+            className="block font-mono font-black text-2xl text-red-300 mb-3"
+          />
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-400">
             <div className="flex items-center space-x-1.5">
               <Calendar className="w-3.5 h-3.5 text-slate-500" />
@@ -217,6 +244,27 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Share */}
+      <div className="flex justify-center -mt-2">
+        <ShareButton title={shareTitle} text={shareText} path={`/matches/${match.id}`} label={isUpcomingMatch ? 'Share fixture' : 'Share result'} />
+      </div>
+
+      {/* Pre-match preview: form, head-to-head, star players, stakes */}
+      {isUpcomingMatch && (
+        <div className="glass-panel rounded-3xl p-5 sm:p-8 border border-pitch-border bg-pitch-card/80 space-y-5">
+          <div className="flex items-center space-x-2.5 border-b border-white/10 pb-4">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Activity className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-black text-white text-base sm:text-lg uppercase tracking-tight">Match Preview</h3>
+              <p className="text-xs text-slate-400">Form guide, head-to-head, star players and what is at stake</p>
+            </div>
+          </div>
+          <MatchPreview match={match} matches={data.matches} players={data.players} />
+        </div>
+      )}
 
       {/* Official Match MVP Showcase */}
       {(match.mvp_player_name || mvpPlayer) && (

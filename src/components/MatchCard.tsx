@@ -1,16 +1,29 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Match } from '@/lib/types';
+import { Match, Player } from '@/lib/types';
 import MatchDetailModal from './MatchDetailModal';
+import LiveMinute from './LiveMinute';
+import { FormPills } from './MatchPreview';
+import { getTeamForm } from '@/lib/matchPreview';
 import { Calendar, Clock, ChevronRight, Shield } from 'lucide-react';
 
 interface MatchCardProps {
   match: Match;
+  /** Every match (enables the form guide on upcoming fixtures). */
+  allMatches?: Match[];
+  /** Every player (lets the preview open instantly, without another request). */
+  allPlayers?: Player[];
 }
 
-export default function MatchCard({ match }: MatchCardProps) {
+export default function MatchCard({ match, allMatches, allPlayers }: MatchCardProps) {
   const [modalOpen, setModalOpen] = useState(false);
+
+  const hasBothTeams = Boolean(match.home_team_id && match.away_team_id);
+  const isUpcoming = match.status === 'upcoming' || match.status === 'postponed';
+  const showPreview = isUpcoming && hasBothTeams;
+  const homeForm = showPreview && allMatches ? getTeamForm(match.home_team_id, allMatches) : null;
+  const awayForm = showPreview && allMatches ? getTeamForm(match.away_team_id, allMatches) : null;
 
   const formattedDate = new Date(match.scheduled_time).toLocaleDateString('en-US', {
     weekday: 'short',
@@ -44,14 +57,23 @@ export default function MatchCard({ match }: MatchCardProps) {
     return match.stage;
   };
 
-  const isClickable = match.status === 'finished' || match.status === 'live' || (match.events && match.events.length > 0);
+  const isClickable =
+    match.status === 'finished' || match.status === 'live' || (match.events && match.events.length > 0) || showPreview;
 
   return (
     <>
       <div
         onClick={() => isClickable && setModalOpen(true)}
+        onKeyDown={(e) => {
+          if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setModalOpen(true);
+          }
+        }}
+        role={isClickable ? 'button' : undefined}
+        tabIndex={isClickable ? 0 : undefined}
         className={`relative glass-card rounded-2xl p-4 sm:p-5 border border-pitch-border bg-pitch-card/75 transition-all duration-300 ${
-          isClickable ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-glow' : ''
+          isClickable ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-glow focus:outline-none focus-visible:border-emerald-400' : ''
         }`}
       >
         {/* Card Header: Group & Status */}
@@ -71,6 +93,7 @@ export default function MatchCard({ match }: MatchCardProps) {
               <span className="flex items-center space-x-1.5 text-[10px] font-bold text-red-400 bg-red-500/20 border border-red-500/40 px-2 py-0.5 rounded-full uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>
                 <span>LIVE</span>
+                <LiveMinute match={match} className="font-mono normal-case text-red-200" />
               </span>
             )}
             {match.status === 'finished' && (
@@ -167,6 +190,15 @@ export default function MatchCard({ match }: MatchCardProps) {
           </div>
         )}
 
+        {/* Form guide for upcoming fixtures (newest result first) */}
+        {homeForm && awayForm && (homeForm.length > 0 || awayForm.length > 0) && (
+          <div className="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between gap-2">
+            <FormPills form={homeForm} size="sm" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Form</span>
+            <FormPills form={awayForm} size="sm" />
+          </div>
+        )}
+
         {/* Card Footer: Date, Venue, Details link */}
         <div className="flex items-center justify-between text-xs text-slate-400 mt-4 pt-2.5 border-t border-white/5">
           <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
@@ -176,7 +208,7 @@ export default function MatchCard({ match }: MatchCardProps) {
 
           {isClickable ? (
             <span className="flex items-center space-x-0.5 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition">
-              <span>Match Details</span>
+              <span>{showPreview ? 'Match Preview' : 'Match Details'}</span>
               <ChevronRight className="w-3 h-3" />
             </span>
           ) : (
@@ -188,7 +220,13 @@ export default function MatchCard({ match }: MatchCardProps) {
       </div>
 
       {/* Details modal */}
-      {modalOpen && <MatchDetailModal match={match} onClose={() => setModalOpen(false)} />}
+      {modalOpen && (
+        <MatchDetailModal
+          match={match}
+          onClose={() => setModalOpen(false)}
+          context={allMatches && allPlayers ? { matches: allMatches, players: allPlayers } : null}
+        />
+      )}
     </>
   );
 }
