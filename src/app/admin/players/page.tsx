@@ -108,7 +108,8 @@ export default function AdminPlayersPage() {
       if (res.ok) {
         fetchData();
       } else {
-        alert('Failed to delete player');
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Failed to delete player');
       }
     } catch {
       alert('Error deleting player');
@@ -190,7 +191,7 @@ export default function AdminPlayersPage() {
           >
             <option value="all">All Teams ({players.length} Players)</option>
             {teams.map((t) => (
-              <option key={t.id} value={t.id}>
+              <option dir="auto" key={t.id} value={t.id}>
                 {t.name} (Poule {t.group_id})
               </option>
             ))}
@@ -229,7 +230,7 @@ export default function AdminPlayersPage() {
                   <td className="py-3.5 px-4 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
                   <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                     <div className="flex items-center space-x-2">
-                      <span>{p.name}</span>
+                      <span dir="auto">{p.name}</span>
                       {p.is_goalkeeper && (
                         <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
                           🧤 GK
@@ -285,7 +286,7 @@ export default function AdminPlayersPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <h3 className="text-xl font-bold text-white">
+              <h3 dir="auto" className="text-xl font-bold text-white">
                 {editingPlayer ? `Edit Player: ${editingPlayer.name}` : 'Register New Player'}
               </h3>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white">
@@ -336,7 +337,7 @@ export default function AdminPlayersPage() {
                   className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
                 >
                   {teams.map((t) => (
-                    <option key={t.id} value={t.id}>
+                    <option dir="auto" key={t.id} value={t.id}>
                       {t.name} (Poule {t.group_id})
                     </option>
                   ))}

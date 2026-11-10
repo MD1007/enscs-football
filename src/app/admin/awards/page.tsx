@@ -658,7 +658,7 @@ export default function AdminAwardsPage() {
                         >
                           <option value="">Select winner manually...</option>
                           {players.map((p) => (
-                            <option key={p.id} value={p.id}>
+                            <option dir="auto" key={p.id} value={p.id}>
                               {p.name} ({p.team_name || 'Team'})
                             </option>
                           ))}
@@ -752,7 +752,7 @@ export default function AdminAwardsPage() {
                         </td>
                         <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                           <div className="flex items-center space-x-2">
-                            <span>{item.player.name}</span>
+                            <span dir="auto">{item.player.name}</span>
                             {item.player.is_captain && (
                               <span className="text-[10px] bg-slate-700 text-slate-300 px-1 py-0.2 rounded font-bold">
                                 (C)

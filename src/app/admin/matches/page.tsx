@@ -528,13 +528,13 @@ function AdminMatchesContent() {
 
                 <div className="space-y-1.5 py-1">
                   <div className="flex items-center justify-between font-bold text-sm text-white" dir="auto">
-                    <span className="truncate">{m.home_team_name || 'TBD'}</span>
+                    <span dir="auto" className="truncate">{m.home_team_name || 'TBD'}</span>
                     <span className="font-mono text-emerald-400 ml-2">
                       {isFinished || isLive ? m.home_score ?? 0 : '-'}
                     </span>
                   </div>
                   <div className="flex items-center justify-between font-bold text-sm text-white" dir="auto">
-                    <span className="truncate">{m.away_team_name || 'TBD'}</span>
+                    <span dir="auto" className="truncate">{m.away_team_name || 'TBD'}</span>
                     <span className="font-mono text-emerald-400 ml-2">
                       {isFinished || isLive ? m.away_score ?? 0 : '-'}
                     </span>
@@ -553,7 +553,7 @@ function AdminMatchesContent() {
                 {m.mvp_player_name && (
                   <div className="text-[11px] text-amber-300 font-bold pt-1.5 flex items-center space-x-1 truncate">
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400 flex-shrink-0" />
-                    <span>MVP: {m.mvp_player_name}</span>
+                    <span dir="auto">MVP: {m.mvp_player_name}</span>
                   </div>
                 )}
 
@@ -588,14 +588,14 @@ function AdminMatchesContent() {
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5">
                 <button
                   onClick={() => openScheduleModal(m)}
-                  className="py-2 px-2 rounded-xl bg-pitch-card hover:bg-white/10 text-white font-bold text-[11px] uppercase tracking-wider transition border border-white/10 flex items-center justify-center space-x-1"
+                  className="py-2 px-2 rounded-xl bg-pitch-card hover:bg-white/10 text-white font-bold text-[11px] uppercase tracking-wider transition border border-white/10 flex items-center justify-center space-x-1 min-h-[44px]"
                 >
                   <Calendar className="w-3.5 h-3.5 text-amber-400" />
                   <span>Set Schedule</span>
                 </button>
                 <button
                   onClick={() => openMatchEditor(m)}
-                  className="py-2 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-[11px] uppercase tracking-wider transition border border-emerald-500/30 flex items-center justify-center space-x-1"
+                  className="py-2 px-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-[11px] uppercase tracking-wider transition border border-emerald-500/30 flex items-center justify-center space-x-1 min-h-[44px]"
                 >
                   <Flame className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Match Center</span>
@@ -625,7 +625,7 @@ function AdminMatchesContent() {
               </div>
               <button
                 onClick={() => setEditingMatch(null)}
-                className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition flex-shrink-0"
+                className="p-2 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -691,7 +691,7 @@ function AdminMatchesContent() {
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
-                    className="w-full bg-pitch-darkest border border-pitch-border rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-emerald-500 uppercase tracking-wider"
+                    className="w-full bg-pitch-darkest border border-pitch-border rounded-xl px-3 py-2 text-base sm:text-xs font-bold text-white focus:outline-none focus:border-emerald-500 uppercase tracking-wider min-h-[44px]"
                   >
                     <option value="finished">Finished (Completed)</option>
                     <option value="live">Live (Playing Now)</option>
@@ -870,10 +870,10 @@ function AdminMatchesContent() {
                           setGoalPlayerId(pid);
                           if (goalAssisterId === e.target.value) setGoalAssisterId('');
                         }}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 min-h-[44px]"
                       >
                         {goalEligiblePlayers.map((p) => (
-                          <option key={p.id} value={p.id}>
+                          <option dir="auto" key={p.id} value={p.id}>
                             {p.name} {p.is_captain ? '(C)' : ''}
                           </option>
                         ))}
@@ -891,7 +891,7 @@ function AdminMatchesContent() {
                         placeholder="e.g. 23"
                         value={goalMinute}
                         onChange={(e) => setGoalMinute(e.target.value)}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white text-center font-mono focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white text-center font-mono focus:outline-none focus:border-emerald-500 min-h-[44px]"
                       />
                     </div>
                   </div>
@@ -905,7 +905,7 @@ function AdminMatchesContent() {
                       <select
                         value={goalType}
                         onChange={(e) => setGoalType(e.target.value as any)}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 min-h-[44px]"
                       >
                         <option value="normal">⚽ Normal Goal</option>
                         <option value="penalty">🎯 Penalty</option>
@@ -926,11 +926,11 @@ function AdminMatchesContent() {
                         disabled={goalType === 'own_goal'}
                         value={goalAssisterId}
                         onChange={(e) => setGoalAssisterId(e.target.value)}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 disabled:opacity-40"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 disabled:opacity-40 min-h-[44px]"
                       >
                         <option value="">-- No Assist (Solo Effort / Unassisted) --</option>
                         {assisterEligiblePlayers.map((p) => (
-                          <option key={p.id} value={p.id}>
+                          <option dir="auto" key={p.id} value={p.id}>
                             👟 {p.name} {p.is_captain ? '(C)' : ''}
                           </option>
                         ))}
@@ -942,7 +942,7 @@ function AdminMatchesContent() {
                   <button
                     type="button"
                     onClick={handleAddGoal}
-                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.99] text-pitch-darkest font-black text-xs uppercase tracking-wider transition shadow-glow flex items-center justify-center space-x-2"
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.99] text-pitch-darkest font-black text-xs uppercase tracking-wider transition shadow-glow flex items-center justify-center space-x-2 min-h-[48px]"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>+ ADD GOAL (AUTO-UPDATE SCORE)</span>
@@ -993,7 +993,7 @@ function AdminMatchesContent() {
                                 <div className="text-[11px] text-slate-400 flex items-center space-x-2">
                                   <span dir="auto">{ev.team_name}</span>
                                   {ev.assister_name && (
-                                    <span className="text-emerald-400/90 font-medium">
+                                    <span dir="auto" className="text-emerald-400/90 font-medium">
                                       • Assist: {ev.assister_name}
                                     </span>
                                   )}
@@ -1003,7 +1003,7 @@ function AdminMatchesContent() {
                             <button
                               type="button"
                               onClick={() => handleRemoveEvent(index)}
-                              className="p-1.5 text-slate-500 hover:text-red-400 transition rounded-lg hover:bg-white/5"
+                              className="p-1.5 text-slate-500 hover:text-red-400 transition rounded-lg hover:bg-white/5 min-w-[44px] min-h-[44px] flex items-center justify-center"
                               title="Delete goal (reverses score)"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1037,10 +1037,10 @@ function AdminMatchesContent() {
                           const cPlayers = players.filter((p) => p.team_id === tid);
                           if (cPlayers.length > 0) setCardPlayerId(cPlayers[0].id);
                         }}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-semibold"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                       >
-                        <option value={editingMatch.home_team_id}>{editingMatch.home_team_name}</option>
-                        <option value={editingMatch.away_team_id}>{editingMatch.away_team_name}</option>
+                        <option dir="auto" value={editingMatch.home_team_id}>{editingMatch.home_team_name}</option>
+                        <option dir="auto" value={editingMatch.away_team_id}>{editingMatch.away_team_name}</option>
                       </select>
                     </div>
 
@@ -1050,7 +1050,7 @@ function AdminMatchesContent() {
                       <select
                         value={cardType}
                         onChange={(e) => setCardType(e.target.value as any)}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-semibold"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                       >
                         <option value="yellow_card">🟨 Yellow Card (-1 pt)</option>
                         <option value="red_card">🟥 Red Card (-4 pts)</option>
@@ -1063,10 +1063,10 @@ function AdminMatchesContent() {
                       <select
                         value={cardPlayerId}
                         onChange={(e) => setCardPlayerId(parseInt(e.target.value))}
-                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-semibold"
+                        className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
                       >
                         {cardEligiblePlayers.map((p) => (
-                          <option key={p.id} value={p.id}>
+                          <option dir="auto" key={p.id} value={p.id}>
                             {p.name} {p.is_captain ? '(C)' : ''}
                           </option>
                         ))}
@@ -1082,13 +1082,13 @@ function AdminMatchesContent() {
                           placeholder="45"
                           value={cardMinute}
                           onChange={(e) => setCardMinute(e.target.value)}
-                          className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-center text-white font-mono"
+                          className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-center text-white font-mono min-h-[44px]"
                         />
                       </div>
                       <button
                         type="button"
                         onClick={handleAddCard}
-                        className="flex-1 py-2.5 px-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-pitch-darkest font-black text-xs uppercase tracking-wider transition"
+                        className="flex-1 py-2.5 px-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-pitch-darkest font-black text-xs uppercase tracking-wider transition min-h-[44px]"
                       >
                         + Add Card
                       </button>
@@ -1135,7 +1135,7 @@ function AdminMatchesContent() {
                             <button
                               type="button"
                               onClick={() => handleRemoveEvent(index)}
-                              className="p-1.5 text-slate-500 hover:text-red-400 transition rounded-lg hover:bg-white/5"
+                              className="p-1.5 text-slate-500 hover:text-red-400 transition rounded-lg hover:bg-white/5 min-w-[44px] min-h-[44px] flex items-center justify-center"
                               title="Delete card"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1278,14 +1278,14 @@ function AdminMatchesContent() {
                         <select
                           value={mvpPlayerId || ''}
                           onChange={(e) => setMvpPlayerId(e.target.value ? parseInt(e.target.value) : null)}
-                          className="w-full bg-pitch-darkest border border-purple-500/40 rounded-xl p-2.5 text-xs text-white font-semibold focus:outline-none focus:border-purple-400"
+                          className="w-full bg-pitch-darkest border border-purple-500/40 rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold focus:outline-none focus:border-purple-400 min-h-[44px]"
                         >
                           <option value="">-- No MVP Selected --</option>
                           <optgroup label={`🔵 ${editingMatch.home_team_name}`}>
                             {players
                               .filter((p) => p.team_id === editingMatch.home_team_id)
                               .map((p) => (
-                                <option key={p.id} value={p.id}>
+                                <option dir="auto" key={p.id} value={p.id}>
                                   {p.name} {p.is_captain ? '(C)' : ''} ({editingMatch.home_team_name})
                                 </option>
                               ))}
@@ -1294,7 +1294,7 @@ function AdminMatchesContent() {
                             {players
                               .filter((p) => p.team_id === editingMatch.away_team_id)
                               .map((p) => (
-                                <option key={p.id} value={p.id}>
+                                <option dir="auto" key={p.id} value={p.id}>
                                   {p.name} {p.is_captain ? '(C)' : ''} ({editingMatch.away_team_name})
                                 </option>
                               ))}
@@ -1312,7 +1312,7 @@ function AdminMatchesContent() {
               <button
                 type="button"
                 onClick={() => setEditingMatch(null)}
-                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold tracking-wide transition"
+                className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold tracking-wide transition min-h-[44px]"
               >
                 Close
               </button>
@@ -1320,7 +1320,7 @@ function AdminMatchesContent() {
                 type="button"
                 disabled={saving}
                 onClick={handleSaveResult}
-                className="px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2 disabled:opacity-50"
+                className="px-5 sm:px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2 disabled:opacity-50 min-h-[44px]"
               >
                 <Save className="w-4 h-4" />
                 <span>{saving ? 'Saving...' : 'Save & Publish Result'}</span>
@@ -1351,7 +1351,7 @@ function AdminMatchesContent() {
               </div>
               <button
                 onClick={() => setSchedulingMatch(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1371,7 +1371,7 @@ function AdminMatchesContent() {
                   required
                   value={scheduleDate}
                   onChange={(e) => setScheduleDate(e.target.value)}
-                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white focus:outline-none focus:border-emerald-500 font-mono min-h-[44px]"
                 />
               </div>
 
@@ -1384,7 +1384,7 @@ function AdminMatchesContent() {
                   required
                   value={scheduleTime}
                   onChange={(e) => setScheduleTime(e.target.value)}
-                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white focus:outline-none focus:border-emerald-500 font-mono min-h-[44px]"
                 />
               </div>
 
@@ -1398,7 +1398,7 @@ function AdminMatchesContent() {
                   value={scheduleVenue}
                   onChange={(e) => setScheduleVenue(e.target.value)}
                   placeholder="Terrain ENSCS"
-                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                  className="w-full bg-pitch-card border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold min-h-[44px]"
                 />
               </div>
 
@@ -1406,14 +1406,14 @@ function AdminMatchesContent() {
                 <button
                   type="button"
                   onClick={() => setSchedulingMatch(null)}
-                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold"
+                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingSchedule}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition min-h-[44px]"
                 >
                   {savingSchedule ? 'Saving...' : 'Confirm Date & Time'}
                 </button>

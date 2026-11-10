@@ -32,3 +32,6 @@ next-env.d.ts
 data/*.db-shm
 data/*.db-wal
 
+
+# Local database backups
+data/*.backup

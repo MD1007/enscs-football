@@ -149,6 +149,23 @@ export function initDatabase() {
   `);
 
   seedInitialData();
+  applyRosterCorrections();
+}
+
+// Idempotent, non-destructive roster corrections. Runs on every start so an
+// existing database (local or production) gets the fix without any reset:
+// the player row keeps its ID, team and every match event linked to it.
+function applyRosterCorrections() {
+  try {
+    db.prepare(
+      `UPDATE players
+       SET name = ?, name_ar = ?
+       WHERE name = ?
+         AND team_id IN (SELECT id FROM teams WHERE name = 'Zoro')`
+    ).run('حجار ايوب', 'حجار ايوب', 'بن بوشريط مروان');
+  } catch (err) {
+    console.error('Roster correction failed:', err);
+  }
 }
 
 function seedInitialData() {
@@ -410,7 +427,7 @@ function seedTeamsAndPlayers() {
       { name: 'رمضاني سيف الدين', ar: 'رمضاني سيف الدين', cap: true, num: 1 },
       { name: 'فراح محمد الأمين', ar: 'فراح محمد الأمين', cap: false, num: 2 },
       { name: 'طه لبصير', ar: 'طه لبصير', cap: false, num: 3 },
-      { name: 'بن بوشريط مروان', ar: 'بن بوشريط مروان', cap: false, num: 4 },
+      { name: 'حجار ايوب', ar: 'حجار ايوب', cap: false, num: 4 },
       { name: 'أنس خضرون', ar: 'أنس خضرون', cap: false, num: 5 },
       { name: 'أوديع إسلام', ar: 'أوديع إسلام', cap: false, num: 6 },
       { name: 'حبار كمال', ar: 'حبار كمال', cap: false, num: 7 },

@@ -169,7 +169,7 @@ export default function MvpTabsClient({ topMvps = [], playerOfTheTournament = []
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                             <div className="flex items-center space-x-2">
-                              <Link
+                              <Link dir="auto"
                                 href={`/players/${item.player.id}`}
                                 className="hover:text-amber-400 transition hover:underline font-bold"
                               >
@@ -343,7 +343,7 @@ export default function MvpTabsClient({ topMvps = [], playerOfTheTournament = []
                           </td>
                           <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                             <div className="flex items-center space-x-2">
-                              <Link
+                              <Link dir="auto"
                                 href={`/players/${item.player.id}`}
                                 className="hover:text-emerald-400 transition hover:underline font-bold"
                               >

@@ -117,7 +117,7 @@ export default function ScorersPage() {
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                         <div className="flex items-center space-x-2">
-                          <Link
+                          <Link dir="auto"
                             href={`/players/${item.player.id}`}
                             className="hover:text-amber-300 transition hover:underline font-bold"
                           >

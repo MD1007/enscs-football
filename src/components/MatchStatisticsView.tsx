@@ -59,11 +59,11 @@ export default function MatchStatisticsView({ match }: MatchStatisticsViewProps)
       <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider pb-2 border-b border-white/10">
         <div className="flex items-center space-x-2 text-left" dir="auto">
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: homeColor }}></span>
-          <span className="text-white truncate max-w-[140px] sm:max-w-none">{match.home_team_name}</span>
+          <span dir="auto" className="text-white truncate max-w-[140px] sm:max-w-none">{match.home_team_name}</span>
         </div>
         <span className="text-slate-500 text-[10px]">TEAM COMPARISON</span>
         <div className="flex items-center space-x-2 text-right" dir="auto">
-          <span className="text-white truncate max-w-[140px] sm:max-w-none">{match.away_team_name}</span>
+          <span dir="auto" className="text-white truncate max-w-[140px] sm:max-w-none">{match.away_team_name}</span>
           <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: awayColor }}></span>
         </div>
       </div>

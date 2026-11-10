@@ -262,7 +262,7 @@ export default function AwardsPublicPage() {
                     <div className="text-[11px] font-bold text-white truncate" dir="auto">
                       {slot.player_name}
                     </div>
-                    <div className="text-[9px] text-slate-300 font-mono truncate">
+                    <div dir="auto" className="text-[9px] text-slate-300 font-mono truncate">
                       {slot.player_team_name}
                     </div>
                     <div className="text-[8px] text-amber-300 font-bold font-mono">

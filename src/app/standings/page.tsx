@@ -122,7 +122,7 @@ export default function StandingsPage() {
                           className="w-3.5 h-3.5 rounded-full"
                           style={{ backgroundColor: row.team_color || '#3B82F6' }}
                         />
-                        <span>{row.team_name}</span>
+                        <span dir="auto">{row.team_name}</span>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center font-bold text-xs text-slate-400">

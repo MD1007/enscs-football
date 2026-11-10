@@ -57,7 +57,7 @@ export default function CardsPage() {
                     <tr key={item.player.id} className="transition hover:bg-white/[0.04]">
                       <td className="py-3 px-4 text-center font-mono text-xs text-slate-400">{item.rank}</td>
                       <td className="py-3 px-4 font-semibold text-white" dir="auto">
-                        <span>{item.player.name}</span>
+                        <span dir="auto">{item.player.name}</span>
                         {item.player.is_captain && (
                           <span className="ml-1.5 text-[10px] text-slate-400">(C)</span>
                         )}
@@ -113,7 +113,7 @@ export default function CardsPage() {
                     <tr key={item.player.id} className="transition hover:bg-white/[0.04]">
                       <td className="py-3 px-4 text-center font-mono text-xs text-slate-400">{item.rank}</td>
                       <td className="py-3 px-4 font-semibold text-white" dir="auto">
-                        <span>{item.player.name}</span>
+                        <span dir="auto">{item.player.name}</span>
                         {item.player.is_captain && (
                           <span className="ml-1.5 text-[10px] text-slate-400">(C)</span>
                         )}

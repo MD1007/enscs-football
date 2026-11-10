@@ -61,7 +61,7 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                 {isHomeEvent && (
                   <div className="space-y-0.5 max-w-full">
                     <div className="flex items-center justify-end space-x-1.5" dir="auto">
-                      <span className="font-bold text-white text-xs sm:text-sm truncate">
+                      <span dir="auto" className="font-bold text-white text-xs sm:text-sm truncate">
                         {ev.player_name || 'Player'}
                       </span>
                       <span className="text-sm sm:text-base flex-shrink-0">
@@ -85,7 +85,7 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                     {isGoal && ev.assister_name && (
                       <div className="text-[10px] sm:text-xs text-slate-400 flex items-center justify-end space-x-1 truncate" dir="auto">
                         <span className="text-blue-400 font-medium">Assist:</span>
-                        <span className="truncate">{ev.assister_name}</span>
+                        <span dir="auto" className="truncate">{ev.assister_name}</span>
                       </div>
                     )}
 
@@ -116,7 +116,7 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                       <span className="text-sm sm:text-base flex-shrink-0">
                         {isGoal ? (isOwnGoal ? '⚠️' : '⚽') : isYellow ? '🟨' : isRed ? '🟥' : '👟'}
                       </span>
-                      <span className="font-bold text-white text-xs sm:text-sm truncate">
+                      <span dir="auto" className="font-bold text-white text-xs sm:text-sm truncate">
                         {ev.player_name || 'Player'}
                       </span>
                     </div>
@@ -137,7 +137,7 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                     {isGoal && ev.assister_name && (
                       <div className="text-[10px] sm:text-xs text-slate-400 flex items-center space-x-1 truncate" dir="auto">
                         <span className="text-blue-400 font-medium">Assist:</span>
-                        <span className="truncate">{ev.assister_name}</span>
+                        <span dir="auto" className="truncate">{ev.assister_name}</span>
                       </div>
                     )}
 

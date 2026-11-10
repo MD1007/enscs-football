@@ -120,7 +120,7 @@ export default function TeamProfilePage({ params }: TeamPageProps) {
               <span className="text-[10px] font-bold uppercase text-amber-400">Team Captain</span>
               <div className="font-bold text-white text-sm" dir="auto">
                 {captain ? (
-                  <Link href={`/players/${captain.id}`} className="hover:text-amber-300 transition hover:underline">
+                  <Link dir="auto" href={`/players/${captain.id}`} className="hover:text-amber-300 transition hover:underline">
                     {captain.name}
                   </Link>
                 ) : (
@@ -206,7 +206,7 @@ export default function TeamProfilePage({ params }: TeamPageProps) {
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                         <div className="flex items-center space-x-2">
-                          <Link
+                          <Link dir="auto"
                             href={`/players/${player.id}`}
                             className="text-sm hover:text-emerald-400 transition font-bold underline-offset-2 hover:underline"
                           >

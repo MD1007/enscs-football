@@ -104,7 +104,7 @@ export default function PlayerProfilePage({ params }: PlayerProfilePageProps) {
           className="inline-flex items-center space-x-2 text-xs font-bold text-slate-400 hover:text-white transition group"
         >
           <ArrowLeft className="w-4 h-4 transition group-hover:-translate-x-1 text-emerald-400" />
-          <span>Back to {team?.name || 'Tournament'}</span>
+          <span dir="auto">Back to {team?.name || 'Tournament'}</span>
         </Link>
       </div>
 
@@ -151,7 +151,7 @@ export default function PlayerProfilePage({ params }: PlayerProfilePageProps) {
             {/* Player Info */}
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <span
+                <span dir="auto"
                   className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider text-pitch-darkest"
                   style={{ backgroundColor: teamColor }}
                 >

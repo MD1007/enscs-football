@@ -149,7 +149,7 @@ export default function AdminKnockoutPage() {
                   <span className="font-mono text-emerald-400">{m.home_score ?? '-'}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span>{m.away_team_name || (idx === 0 ? 'Best 2nd Place Team' : '1st Place Group C')}</span>
+                  <span dir="auto">{m.away_team_name || (idx === 0 ? 'Best 2nd Place Team' : '1st Place Group C')}</span>
                   <span className="font-mono text-emerald-400">{m.away_score ?? '-'}</span>
                 </div>
               </div>
@@ -172,11 +172,11 @@ export default function AdminKnockoutPage() {
                   <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20">{finalMatch.status}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span>{finalMatch.home_team_name || 'Winner Semi-Final 1'}</span>
+                  <span dir="auto">{finalMatch.home_team_name || 'Winner Semi-Final 1'}</span>
                   <span className="font-mono text-amber-400">{finalMatch.home_score ?? '-'}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span>{finalMatch.away_team_name || 'Winner Semi-Final 2'}</span>
+                  <span dir="auto">{finalMatch.away_team_name || 'Winner Semi-Final 2'}</span>
                   <span className="font-mono text-amber-400">{finalMatch.away_score ?? '-'}</span>
                 </div>
               </div>
@@ -189,11 +189,11 @@ export default function AdminKnockoutPage() {
                   <span className="text-[10px] px-2 py-0.5 rounded bg-white/5">{thirdMatch.status}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span>{thirdMatch.home_team_name || 'Loser Semi-Final 1'}</span>
+                  <span dir="auto">{thirdMatch.home_team_name || 'Loser Semi-Final 1'}</span>
                   <span className="font-mono text-slate-300">{thirdMatch.home_score ?? '-'}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span>{thirdMatch.away_team_name || 'Loser Semi-Final 2'}</span>
+                  <span dir="auto">{thirdMatch.away_team_name || 'Loser Semi-Final 2'}</span>
                   <span className="font-mono text-slate-300">{thirdMatch.away_score ?? '-'}</span>
                 </div>
               </div>
