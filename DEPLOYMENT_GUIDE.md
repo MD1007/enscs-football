@@ -46,6 +46,30 @@ git push -u origin main
 
 You can send this link to your classmates on Telegram, WhatsApp, Messenger, or Facebook. They can open it on their phones anytime!
 
+### Step 3 (IMPORTANT): Turn on cloud backup so results are never lost
+
+Render's free plan has **no permanent disk**: every restart or new deploy starts again from the
+database file stored in GitHub, so results typed into the live admin would disappear.
+The platform fixes this by saving a snapshot of all tournament data to the `data-backup`
+branch of the GitHub repository a few seconds after every change, and restoring it on start.
+It only works once a GitHub token is configured:
+
+1. On GitHub: **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+   - Repository access: **Only select repositories** → `enscs-football`
+   - Permissions → Repository permissions → **Contents: Read and write**
+   - Pick an expiration after the end of the tournament, then copy the token.
+2. On Render: open the service → **Environment** → add
+   - Key: `GITHUB_BACKUP_TOKEN`
+   - Value: the token you copied
+   Save (Render redeploys automatically).
+3. Open `/admin` on the live site. The banner at the top must say **"Cloud backup is ON"**.
+
+Notes:
+- Do step 2 at a moment when nobody is entering results (the redeploy takes ~2 minutes).
+- With backup ON, the snapshot is the source of truth. Change data through the admin pages,
+  not by editing `data/tournament.db` in the repository.
+- If you ever attach a paid persistent disk instead, set `DATA_DIR` to its mount path.
+
 ---
 
 ## ⚡ OPTION 2: DEPLOY TO VERCEL

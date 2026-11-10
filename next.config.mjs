@@ -13,6 +13,8 @@ const nextConfig = {
   },
   experimental: {
     serverComponentsExternalPackages: ['better-sqlite3'],
+    // Runs src/instrumentation.ts at server start (restores the data snapshot).
+    instrumentationHook: true,
   },
 };
 

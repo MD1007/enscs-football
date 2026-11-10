@@ -3,7 +3,9 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 
-const dbDirectory = path.join(process.cwd(), 'data');
+// DATA_DIR lets the database live on a mounted persistent disk if one is ever
+// attached; by default it stays in ./data exactly as before.
+const dbDirectory = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(process.cwd(), 'data');
 if (!fs.existsSync(dbDirectory)) {
   fs.mkdirSync(dbDirectory, { recursive: true });
 }
@@ -148,6 +150,14 @@ export function initDatabase() {
     );
   `);
 
+  // Small key/value store for internal bookkeeping (e.g. last snapshot time).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+
   seedInitialData();
   applyRosterCorrections();
 }
@@ -155,7 +165,7 @@ export function initDatabase() {
 // Idempotent, non-destructive roster corrections. Runs on every start so an
 // existing database (local or production) gets the fix without any reset:
 // the player row keeps its ID, team and every match event linked to it.
-function applyRosterCorrections() {
+export function applyRosterCorrections() {
   try {
     db.prepare(
       `UPDATE players
@@ -581,6 +591,14 @@ export function logActivity(action: string, details: string, adminUsername: stri
     );
   } catch (err) {
     console.error('Failed to log activity:', err);
+  }
+
+  // Every admin change is logged here, so this is where a cloud backup is
+  // requested (no-op when persistence is not configured).
+  try {
+    (globalThis as unknown as { __enscsBackupSoon?: () => void }).__enscsBackupSoon?.();
+  } catch {
+    // never let a backup trigger break an admin action
   }
 }
 

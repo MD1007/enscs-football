@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getAdminSession } from '@/lib/auth';
 import { getFullTournamentData, getActivityLogs } from '@/lib/tournamentService';
+import { getPersistenceStatus } from '@/lib/persistence';
 import DiscrepancyBanner from '@/components/DiscrepancyBanner';
 import {
   Trophy,
@@ -28,6 +29,7 @@ export default async function AdminDashboardPage() {
 
   const data = getFullTournamentData();
   const logs = getActivityLogs(8);
+  const storage = getPersistenceStatus();
 
   const { matches, summary, teams } = data;
 
@@ -42,6 +44,36 @@ export default async function AdminDashboardPage() {
     <div className="space-y-8">
       {/* Discrepancy Notification Banner */}
       <DiscrepancyBanner isResolved={isDiscrepancyResolved} />
+
+      {/* Cloud backup status */}
+      {storage.enabled && storage.started && !storage.last_error ? (
+        <div className="p-3.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 flex items-start space-x-3 text-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-emerald-300">Cloud backup is ON</p>
+            <p className="text-slate-300">
+              Results are saved automatically and restored after any restart or update.
+              {storage.last_backup_at && (
+                <> Last saved: {new Date(storage.last_backup_at).toLocaleString('en-GB', { timeZone: 'Africa/Algiers' })}.</>
+              )}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-3.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 flex items-start space-x-3 text-xs">
+          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-amber-300">
+              {storage.enabled ? 'Cloud backup has a problem' : 'Cloud backup is OFF'}
+            </p>
+            <p className="text-slate-300">
+              {storage.enabled
+                ? storage.last_error || 'Backups are not running yet.'
+                : 'Results entered here can be lost when the server restarts or is updated. Set GITHUB_BACKUP_TOKEN on the server to turn it on (see DEPLOYMENT_GUIDE.md).'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
