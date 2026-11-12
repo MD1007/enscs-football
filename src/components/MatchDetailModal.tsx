@@ -7,6 +7,7 @@ import MatchEventsTimeline from './MatchEventsTimeline';
 import MatchPreview from './MatchPreview';
 import LiveMinute from './LiveMinute';
 import ShootoutDisplay from './ShootoutDisplay';
+import FanPolls from './FanPolls';
 import {
   X,
   Shield,
@@ -227,18 +228,22 @@ export default function MatchDetailModal({ match, onClose, context }: MatchDetai
         {/* Modal Content Body */}
         <div className="p-4 sm:p-6 max-h-[55vh] overflow-y-auto overscroll-contain">
           {isPreview ? (
-            previewData ? (
-              <MatchPreview match={match} matches={previewData.matches} players={previewData.players} />
-            ) : previewError ? (
-              <p className="text-sm text-slate-400 text-center py-8">Could not load the preview. Please try again.</p>
-            ) : (
-              <div className="text-center py-10 text-slate-400">
-                <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-xs">Loading preview...</p>
-              </div>
-            )
+            <div className="space-y-6">
+              <FanPolls match={match} />
+              {previewData ? (
+                <MatchPreview match={match} matches={previewData.matches} players={previewData.players} />
+              ) : previewError ? (
+                <p className="text-sm text-slate-400 text-center py-8">Could not load the preview. Please try again.</p>
+              ) : (
+                <div className="text-center py-10 text-slate-400">
+                  <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs">Loading preview...</p>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-6">
+              <FanPolls match={match} />
               {match.shootout && match.shootout.length > 0 && (
                 <ShootoutDisplay match={match} />
               )}

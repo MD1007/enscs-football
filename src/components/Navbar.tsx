@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   Clock,
+  Vote,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -40,6 +41,7 @@ export default function Navbar({ nextMatchTime }: NavbarProps) {
     { label: 'G+A', href: '/contributions', icon: Flame },
     { label: 'MVPs', href: '/mvps', icon: Crown },
     { label: 'Cards', href: '/cards', icon: ShieldAlert },
+    { label: 'Fan Zone', href: '/fan-zone', icon: Vote },
     { label: 'Teams & Players', href: '/teams', icon: Users },
     { label: 'Rules', href: '/rules', icon: BookOpen },
   ];

@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import MatchCard from '@/components/MatchCard';
 import { Match, Player, GroupId } from '@/lib/types';
 import { syncServerTime } from '@/lib/liveClock';
-import { Calendar, Filter, Search } from 'lucide-react';
+import { Calendar, Filter, Search, Vote } from 'lucide-react';
+import Link from 'next/link';
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -93,9 +94,18 @@ export default function MatchesPage() {
           </p>
         </div>
 
-        <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold self-start sm:self-auto flex-shrink-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-          <span>Live Auto-Sync Active</span>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto flex-shrink-0">
+          <Link
+            href="/fan-zone"
+            className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-bold transition shadow-sm"
+          >
+            <Vote className="w-3.5 h-3.5 text-purple-400" />
+            <span>Fan Predictions & Polls</span>
+          </Link>
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>Live Auto-Sync Active</span>
+          </div>
         </div>
       </div>
 
