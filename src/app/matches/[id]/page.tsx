@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getFullTournamentData } from '@/lib/tournamentService';
+import { getMatchGoalkeeperId } from '@/lib/calculations';
 import MatchEventsTimeline from '@/components/MatchEventsTimeline';
 import MatchMVPSpotlight from '@/components/MatchMVPSpotlight';
 import MatchPreview from '@/components/MatchPreview';
@@ -37,8 +38,20 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
   const homeTeam = data.teams.find((t) => t.id === match.home_team_id);
   const awayTeam = data.teams.find((t) => t.id === match.away_team_id);
 
-  const homePlayers = data.players.filter((p) => p.team_id === match.home_team_id);
-  const awayPlayers = data.players.filter((p) => p.team_id === match.away_team_id);
+  // Squad plus any jokers who guested for that side in this match
+  const guestsFor = (teamId: number) =>
+    (match.guests || [])
+      .filter((g) => g.team_id === teamId)
+      .map((g) => data.players.find((p) => p.id === g.player_id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p));
+  const homePlayers = [...data.players.filter((p) => p.team_id === match.home_team_id), ...guestsFor(match.home_team_id)];
+  const awayPlayers = [...data.players.filter((p) => p.team_id === match.away_team_id), ...guestsFor(match.away_team_id)];
+  const keeperIds = new Set(
+    [
+      getMatchGoalkeeperId(match, 'home', data.players, data.teams),
+      getMatchGoalkeeperId(match, 'away', data.players, data.teams),
+    ].filter((id): id is number => Boolean(id))
+  );
 
   const mvpPlayer = data.players.find((p) => p.id === match.mvp_player_id);
 
@@ -341,6 +354,16 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
                           (C)
                         </span>
                       )}
+                      {keeperIds.has(p.id) && (
+                        <span className="text-[9px] bg-blue-500/20 text-blue-200 border border-blue-400/40 px-1.5 rounded font-black whitespace-nowrap">
+                          🧤 GK
+                        </span>
+                      )}
+                      {p.is_joker && (
+                        <span className="text-[9px] bg-purple-500/20 text-purple-200 border border-purple-400/40 px-1.5 rounded font-black whitespace-nowrap">
+                          🃏 Joker
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center space-x-1.5">
@@ -392,6 +415,16 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
                       {p.is_captain && (
                         <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-1.5 py-0.2 rounded font-black">
                           (C)
+                        </span>
+                      )}
+                      {keeperIds.has(p.id) && (
+                        <span className="text-[9px] bg-blue-500/20 text-blue-200 border border-blue-400/40 px-1.5 rounded font-black whitespace-nowrap">
+                          🧤 GK
+                        </span>
+                      )}
+                      {p.is_joker && (
+                        <span className="text-[9px] bg-purple-500/20 text-purple-200 border border-purple-400/40 px-1.5 rounded font-black whitespace-nowrap">
+                          🃏 Joker
                         </span>
                       )}
                     </div>

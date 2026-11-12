@@ -57,7 +57,7 @@ function AdminMatchesContent() {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   // Modal active tab
-  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'mvp'>('goals');
+  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'gk' | 'mvp'>('goals');
 
   // Form states for match editor
   const [homeScore, setHomeScore] = useState<string>('0');
@@ -81,6 +81,17 @@ function AdminMatchesContent() {
   // MVP states
   const [mvpMode, setMvpMode] = useState<'auto' | 'manual'>('auto');
   const [mvpPlayerId, setMvpPlayerId] = useState<number | null>(null);
+
+  // Goalkeepers of this match (null = the team's usual keeper), their saves, and guest players
+  const [homeGkId, setHomeGkId] = useState<number | null>(null);
+  const [awayGkId, setAwayGkId] = useState<number | null>(null);
+  const [homeSaves, setHomeSaves] = useState(0);
+  const [awaySaves, setAwaySaves] = useState(0);
+  const [homePenSaves, setHomePenSaves] = useState(0);
+  const [awayPenSaves, setAwayPenSaves] = useState(0);
+  const [guests, setGuests] = useState<{ player_id: number; team_id: number }[]>([]);
+  const [guestPlayerId, setGuestPlayerId] = useState<string>('');
+  const [guestTeamId, setGuestTeamId] = useState<number>(0);
 
   // Events list
   const [events, setEvents] = useState<
@@ -231,6 +242,17 @@ function AdminMatchesContent() {
     setMvpMode(match.mvp_mode || 'auto');
     setMvpPlayerId(match.mvp_player_id || null);
 
+    // Goalkeepers, saves and guest players
+    setHomeGkId(match.home_gk_id || null);
+    setAwayGkId(match.away_gk_id || null);
+    setHomeSaves(Number(match.home_saves) || 0);
+    setAwaySaves(Number(match.away_saves) || 0);
+    setHomePenSaves(Number(match.home_pen_saves) || 0);
+    setAwayPenSaves(Number(match.away_pen_saves) || 0);
+    setGuests((match.guests || []).map((g) => ({ player_id: g.player_id, team_id: g.team_id })));
+    setGuestPlayerId('');
+    setGuestTeamId(match.home_team_id);
+
     // Existing events
     const existingEvents = (match.events || []).map((e) => ({
       player_id: e.player_id,
@@ -306,10 +328,23 @@ function AdminMatchesContent() {
     }).catch((err) => console.error('Clock sync failed:', err));
   };
 
+  // Everyone who can appear for a side in THIS match: its squad plus the guests added to it.
+  const sidePlayers = (teamId: number): Player[] => {
+    const squad = players.filter((p) => p.team_id === teamId);
+    const sideGuests = guests
+      .filter((g) => g.team_id === teamId)
+      .map((g) => players.find((p) => p.id === g.player_id))
+      .filter((p): p is Player => Boolean(p));
+    return [...squad, ...sideGuests];
+  };
+  const isGuestHere = (playerId: number) => guests.some((g) => g.player_id === playerId);
+  const jokerPool = players.filter((p) => p.is_joker && !isGuestHere(p.id));
+
   // Players eligible for goal registration (based on goalTeamId)
   const goalEligiblePlayers = useMemo(() => {
-    return players.filter((p) => p.team_id === goalTeamId);
-  }, [players, goalTeamId]);
+    return sidePlayers(goalTeamId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, goalTeamId, guests]);
 
   // Potential assisters: registered players from the SAME team, excluding the chosen scorer
   const assisterEligiblePlayers = useMemo(() => {
@@ -318,8 +353,9 @@ function AdminMatchesContent() {
 
   // Players eligible for card registration
   const cardEligiblePlayers = useMemo(() => {
-    return players.filter((p) => p.team_id === cardTeamId);
-  }, [players, cardTeamId]);
+    return sidePlayers(cardTeamId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, cardTeamId, guests]);
 
   // Live Automatic MVP Candidate Analysis
   const liveMvpAnalysis = useMemo(() => {
@@ -332,10 +368,55 @@ function AdminMatchesContent() {
       home_penalties: homePenalties !== '' ? parseInt(homePenalties) : null,
       away_penalties: awayPenalties !== '' ? parseInt(awayPenalties) : null,
       status: status as any,
+      home_gk_id: homeGkId,
+      away_gk_id: awayGkId,
+      home_saves: homeSaves,
+      away_saves: awaySaves,
+      home_pen_saves: homePenSaves,
+      away_pen_saves: awayPenSaves,
+      guests,
     };
 
     return calculateMatchMVP(mockMatch, players, events as any[]);
-  }, [editingMatch, homeScore, awayScore, homePenalties, awayPenalties, status, players, events]);
+  }, [
+    editingMatch,
+    homeScore,
+    awayScore,
+    homePenalties,
+    awayPenalties,
+    status,
+    players,
+    events,
+    homeGkId,
+    awayGkId,
+    homeSaves,
+    awaySaves,
+    homePenSaves,
+    awayPenSaves,
+    guests,
+  ]);
+
+  // GUEST (JOKER) HANDLERS
+  const handleAddGuest = () => {
+    if (!editingMatch || !guestPlayerId || !guestTeamId) return;
+    const pid = Number(guestPlayerId);
+    if (isGuestHere(pid)) return;
+    setGuests((prev) => [...prev, { player_id: pid, team_id: guestTeamId }]);
+    setGuestPlayerId('');
+    requestAutoSave();
+  };
+
+  const handleRemoveGuest = (playerId: number) => {
+    const used = events.some((e) => e.player_id === playerId || e.assister_id === playerId);
+    if (used) {
+      alert('This guest has a goal, assist or card in this match. Remove those events first.');
+      return;
+    }
+    setGuests((prev) => prev.filter((g) => g.player_id !== playerId));
+    if (homeGkId === playerId) setHomeGkId(null);
+    if (awayGkId === playerId) setAwayGkId(null);
+    requestAutoSave();
+  };
 
   // ADD GOAL HANDLER: Auto updates score + adds event + validates
   const handleAddGoal = () => {
@@ -497,6 +578,13 @@ function AdminMatchesContent() {
         fouls_away: foulsAway !== '' ? parseInt(foulsAway) : null,
         scheduled_time: scheduledTime,
         venue: venue,
+        home_gk_id: homeGkId,
+        away_gk_id: awayGkId,
+        home_saves: homeSaves,
+        away_saves: awaySaves,
+        home_pen_saves: homePenSaves,
+        away_pen_saves: awayPenSaves,
+        guests,
         events: events.map((e) => ({
           player_id: e.player_id,
           team_id: e.team_id,
@@ -1097,6 +1185,20 @@ function AdminMatchesContent() {
               </button>
               <button
                 type="button"
+                onClick={() => setModalTab('gk')}
+                className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition ${
+                  modalTab === 'gk'
+                    ? 'border-blue-400 text-blue-300 bg-blue-400/5'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>
+                  🧤 Keepers & Guests ({homeSaves + awaySaves + homePenSaves + awayPenSaves}
+                  {guests.length > 0 ? ` · ${guests.length}🃏` : ''})
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setModalTab('mvp')}
                 className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition ${
                   modalTab === 'mvp'
@@ -1489,6 +1591,205 @@ function AdminMatchesContent() {
 
 
 
+            {/* TAB 3: GOALKEEPERS, SAVES & GUEST PLAYERS */}
+            {modalTab === 'gk' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(
+                    [
+                      {
+                        side: 'home' as const,
+                        teamId: editingMatch.home_team_id,
+                        teamName: editingMatch.home_team_name,
+                        gkId: homeGkId,
+                        setGk: setHomeGkId,
+                        saves: homeSaves,
+                        setSaves: setHomeSaves,
+                        pens: homePenSaves,
+                        setPens: setHomePenSaves,
+                      },
+                      {
+                        side: 'away' as const,
+                        teamId: editingMatch.away_team_id,
+                        teamName: editingMatch.away_team_name,
+                        gkId: awayGkId,
+                        setGk: setAwayGkId,
+                        saves: awaySaves,
+                        setSaves: setAwaySaves,
+                        pens: awayPenSaves,
+                        setPens: setAwayPenSaves,
+                      },
+                    ]
+                  ).map((k) => {
+                    const team = teams.find((t) => t.id === k.teamId);
+                    const usualKeeper = players.find((p) => p.id === team?.goalkeeper_id);
+                    const keeper = players.find((p) => p.id === k.gkId) || usualKeeper;
+                    const bump = (set: React.Dispatch<React.SetStateAction<number>>, delta: number) => {
+                      set((v) => Math.max(0, v + delta));
+                      requestAutoSave();
+                    };
+                    return (
+                      <div key={k.side} className="p-4 rounded-2xl bg-pitch-card border border-blue-500/30 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-black uppercase text-blue-300 truncate" dir="auto">
+                            🧤 {k.teamName}
+                          </span>
+                          <span className="text-[10px] text-slate-400 truncate" dir="auto">
+                            {keeper ? keeper.name : 'No keeper set'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                            Goalkeeper in this match
+                          </label>
+                          <select
+                            value={k.gkId ?? ''}
+                            onChange={(e) => {
+                              k.setGk(e.target.value ? Number(e.target.value) : null);
+                              requestAutoSave();
+                            }}
+                            className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold focus:outline-none focus:border-blue-400 min-h-[44px]"
+                          >
+                            <option value="">
+                              {usualKeeper ? `Usual keeper: ${usualKeeper.name}` : 'Usual keeper (none set for this team)'}
+                            </option>
+                            {sidePlayers(k.teamId).map((p) => (
+                              <option dir="auto" key={p.id} value={p.id}>
+                                {p.name} {isGuestHere(p.id) ? '🃏 guest' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {(
+                          [
+                            { label: 'Great saves', hint: 'only you see this', value: k.saves, set: k.setSaves },
+                            { label: 'Penalties saved', hint: '', value: k.pens, set: k.setPens },
+                          ]
+                        ).map((c) => (
+                          <div key={c.label} className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <span className="block text-xs font-bold text-white">{c.label}</span>
+                              {c.hint && <span className="block text-[10px] text-slate-500">{c.hint}</span>}
+                            </div>
+                            <div className="flex items-center space-x-2 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => bump(c.set, -1)}
+                                disabled={c.value === 0}
+                                aria-label={`Remove one: ${c.label}, ${k.teamName}`}
+                                className="w-12 h-12 rounded-xl bg-pitch-darkest hover:bg-white/10 active:scale-95 border border-white/10 text-white font-black text-xl flex items-center justify-center transition disabled:opacity-30"
+                              >
+                                −
+                              </button>
+                              <span className="w-10 text-center font-mono font-black text-2xl text-white tabular-nums">
+                                {c.value}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => bump(c.set, 1)}
+                                aria-label={`Add one: ${c.label}, ${k.teamName}`}
+                                className="w-14 h-12 rounded-xl bg-blue-500/25 hover:bg-blue-500/40 active:scale-95 border border-blue-400/50 text-blue-100 font-black text-2xl flex items-center justify-center transition"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Guest / joker players */}
+                <div className="p-4 rounded-2xl bg-pitch-card border border-purple-500/30 space-y-3">
+                  <div>
+                    <span className="text-xs font-black uppercase text-purple-300">🃏 Guest players (jokers)</span>
+                    <p className="text-[11px] text-slate-400">
+                      Add a joker to one side for this match only. He then appears in that team&apos;s scorer, assist,
+                      card and goalkeeper lists.
+                    </p>
+                  </div>
+
+                  {guests.length > 0 && (
+                    <ul className="space-y-1.5">
+                      {guests.map((g) => {
+                        const p = players.find((x) => x.id === g.player_id);
+                        return (
+                          <li
+                            key={g.player_id}
+                            className="flex items-center justify-between gap-2 p-2 pl-3 rounded-xl bg-pitch-darkest border border-white/5 text-xs"
+                          >
+                            <span className="min-w-0 truncate" dir="auto">
+                              <span className="font-black text-white">{p?.name || `Player #${g.player_id}`}</span>
+                              <span className="text-slate-400">
+                                {' '}
+                                · for {g.team_id === editingMatch.home_team_id ? editingMatch.home_team_name : editingMatch.away_team_name}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveGuest(g.player_id)}
+                              aria-label={`Remove guest ${p?.name || ''}`}
+                              className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 hover:text-red-400 rounded-lg hover:bg-white/5 transition flex-shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  {jokerPool.length === 0 && guests.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 italic">
+                      No jokers registered. Create one in Players → Register New Player → tick &quot;Joker&quot;.
+                    </p>
+                  ) : (
+                    jokerPool.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+                        <select
+                          value={guestPlayerId}
+                          onChange={(e) => setGuestPlayerId(e.target.value)}
+                          aria-label="Joker to add"
+                          className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
+                        >
+                          <option value="">-- Choose joker --</option>
+                          {jokerPool.map((p) => (
+                            <option dir="auto" key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={guestTeamId}
+                          onChange={(e) => setGuestTeamId(Number(e.target.value))}
+                          aria-label="Side the joker plays for"
+                          className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
+                        >
+                          <option dir="auto" value={editingMatch.home_team_id}>
+                            plays for {editingMatch.home_team_name}
+                          </option>
+                          <option dir="auto" value={editingMatch.away_team_id}>
+                            plays for {editingMatch.away_team_name}
+                          </option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!guestPlayerId}
+                          onClick={handleAddGuest}
+                          className="min-h-[44px] px-4 rounded-xl bg-purple-500 hover:bg-purple-400 disabled:opacity-40 text-white font-black text-xs uppercase tracking-wider transition"
+                        >
+                          + Add guest
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* TAB 4: MAN OF THE MATCH (MVP) */}
             {modalTab === 'mvp' && (
               <div className="space-y-4">
@@ -1620,8 +1921,7 @@ function AdminMatchesContent() {
                         >
                           <option value="">-- No MVP Selected --</option>
                           <optgroup label={`🔵 ${editingMatch.home_team_name}`}>
-                            {players
-                              .filter((p) => p.team_id === editingMatch.home_team_id)
+                            {sidePlayers(editingMatch.home_team_id)
                               .map((p) => (
                                 <option dir="auto" key={p.id} value={p.id}>
                                   {p.name} {p.is_captain ? '(C)' : ''} ({editingMatch.home_team_name})
@@ -1629,8 +1929,7 @@ function AdminMatchesContent() {
                               ))}
                           </optgroup>
                           <optgroup label={`🔴 ${editingMatch.away_team_name}`}>
-                            {players
-                              .filter((p) => p.team_id === editingMatch.away_team_id)
+                            {sidePlayers(editingMatch.away_team_id)
                               .map((p) => (
                                 <option dir="auto" key={p.id} value={p.id}>
                                   {p.name} {p.is_captain ? '(C)' : ''} ({editingMatch.away_team_name})

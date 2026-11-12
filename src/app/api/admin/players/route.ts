@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminFromRequest } from '@/lib/auth';
-import db, { logActivity } from '@/lib/db';
+import db, { logActivity, ensureJokerTeam } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,7 +85,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const name = cleanText(body.name);
     const nameAr = cleanText(body.name_ar) || null;
-    const teamId = Number(body.team_id);
+    // A joker (guest player) has no fixed team: he is kept in the hidden joker squad
+    // and attached to a side match by match in the Match Center.
+    const isJoker = Boolean(body.is_joker);
+    const teamId = isJoker ? ensureJokerTeam() : Number(body.team_id);
 
     if (!name || !Number.isInteger(teamId) || teamId <= 0) {
       return NextResponse.json({ error: 'Player name and team ID are required' }, { status: 400 });
@@ -98,8 +101,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    const isCaptain = Boolean(body.is_captain);
-    const isGK = Boolean(body.is_goalkeeper) || body.position === 'Goalkeeper';
+    const isCaptain = !isJoker && Boolean(body.is_captain);
+    const isGK = !isJoker && (Boolean(body.is_goalkeeper) || body.position === 'Goalkeeper');
     const position = isGK ? 'Goalkeeper' : cleanText(body.position) || 'Attacker';
     const squadNumber = cleanSquadNumber(body.squad_number);
 
@@ -116,7 +119,11 @@ export async function POST(request: Request) {
     });
     const playerId = create();
 
-    logActivity('ADD_PLAYER', `Added player "${name}" (${position}) to team "${team.name}"`, admin.username);
+    logActivity(
+      'ADD_PLAYER',
+      isJoker ? `Added joker (guest player) "${name}"` : `Added player "${name}" (${position}) to team "${team.name}"`,
+      admin.username
+    );
 
     return NextResponse.json({ success: true, player_id: playerId });
   } catch (error: any) {
@@ -151,18 +158,30 @@ export async function PUT(request: Request) {
     const squadNumber =
       body.squad_number !== undefined ? cleanSquadNumber(body.squad_number) : existing.squad_number;
 
-    const teamId = body.team_id !== undefined && body.team_id !== null ? Number(body.team_id) : existing.team_id;
+    // Joker switch: on = move to the hidden joker squad, off = needs a real team.
+    const jokerTeamId = ensureJokerTeam();
+    const wasJoker = existing.team_id === jokerTeamId;
+    const isJoker = body.is_joker !== undefined ? Boolean(body.is_joker) : wasJoker;
+
+    const requestedTeamId =
+      body.team_id !== undefined && body.team_id !== null ? Number(body.team_id) : existing.team_id;
+    const teamId = isJoker ? jokerTeamId : requestedTeamId;
+    if (!isJoker && teamId === jokerTeamId) {
+      return NextResponse.json({ error: 'Choose the team this player now belongs to' }, { status: 400 });
+    }
     if (!db.prepare('SELECT id FROM teams WHERE id = ?').get(teamId)) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 
-    const isCaptain = body.is_captain !== undefined ? Boolean(body.is_captain) : Boolean(existing.is_captain);
+    const isCaptain =
+      !isJoker && (body.is_captain !== undefined ? Boolean(body.is_captain) : Boolean(existing.is_captain));
     const isGK =
-      body.is_goalkeeper !== undefined
+      !isJoker &&
+      (body.is_goalkeeper !== undefined
         ? Boolean(body.is_goalkeeper)
         : body.position !== undefined
           ? body.position === 'Goalkeeper'
-          : Boolean(existing.is_goalkeeper);
+          : Boolean(existing.is_goalkeeper));
 
     const requestedPosition = cleanText(body.position);
     const previousOutfield =
@@ -247,6 +266,8 @@ export async function DELETE(request: Request) {
     const remove = db.transaction(() => {
       db.prepare('UPDATE teams SET captain_id = NULL WHERE captain_id = ?').run(id);
       db.prepare('UPDATE teams SET goalkeeper_id = NULL WHERE goalkeeper_id = ?').run(id);
+      db.prepare('UPDATE matches SET home_gk_id = NULL WHERE home_gk_id = ?').run(id);
+      db.prepare('UPDATE matches SET away_gk_id = NULL WHERE away_gk_id = ?').run(id);
       db.prepare('DELETE FROM players WHERE id = ?').run(id);
     });
     remove();

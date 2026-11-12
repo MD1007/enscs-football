@@ -73,10 +73,14 @@ export default function AdminAwardsPage() {
     goal: 4,
     assist: 3,
     motm: 3,
-    gk_clean_sheet: 4,
+    gk_clean_sheet: 30,
     def_clean_sheet: 2,
     yellow_card: -1,
     red_card: -3,
+    gk_goal: 15,
+    gk_assist: 6,
+    gk_save: 1,
+    gk_penalty_save: 5,
   });
   const [minAppearances, setMinAppearances] = useState<number>(3);
 
@@ -1277,6 +1281,25 @@ export default function AdminAwardsPage() {
                   className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
                 />
               </div>
+
+              {(
+                [
+                  ['gk_goal', '🧤 Goal scored by a goalkeeper'],
+                  ['gk_assist', '🧤 Assist by a goalkeeper'],
+                  ['gk_save', '🧤 Each great save'],
+                  ['gk_penalty_save', '🧤 Each penalty saved'],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key}>
+                  <label className="block text-xs font-bold uppercase text-blue-300 mb-1">{label}</label>
+                  <input
+                    type="number"
+                    value={weights[key] ?? 0}
+                    onChange={(e) => setWeights({ ...weights, [key]: parseInt(e.target.value) || 0 })}
+                    className="w-full bg-pitch-darkest border border-blue-500/40 rounded-xl p-2.5 text-xs text-white font-mono font-bold"
+                  />
+                </div>
+              ))}
 
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Min Appearances for POT</label>

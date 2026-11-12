@@ -41,6 +41,15 @@ export interface Player {
   goals_per_match?: number;
   assists_per_match?: number;
   overall_points?: number;
+  /** Guest player with no fixed team (kept in the hidden Joker squad). */
+  is_joker?: boolean;
+  /** Teams a joker has played for. */
+  guest_teams?: string[];
+  gk_goals?: number;
+  gk_assists?: number;
+  penalty_saves?: number;
+  /** Great saves: admin-only, removed from public responses. */
+  saves?: number;
   nicknames?: PlayerBadge[];
 }
 
@@ -59,7 +68,19 @@ export interface Team {
   created_at?: string;
 }
 
+export interface MatchGuest {
+  player_id: number;
+  team_id: number;
+  player_name?: string;
+}
+
 export interface MatchEvent {
+  /** True when this player was the goalkeeper of his side in this match. */
+  player_is_gk?: boolean;
+  assister_is_gk?: boolean;
+  /** True when this player is a joker (guest) rather than a squad member. */
+  player_is_guest?: boolean;
+  assister_is_guest?: boolean;
   id: number;
   match_id: number;
   team_id: number;
@@ -112,6 +133,16 @@ export interface Match {
   clock_started_at?: number | null;
   clock_accumulated_ms?: number | null;
   clock_running?: number | boolean | null;
+  // Goalkeeper who actually played each side (null = the team's usual keeper)
+  home_gk_id?: number | null;
+  away_gk_id?: number | null;
+  // Admin-only counters (removed from public responses)
+  home_saves?: number | null;
+  away_saves?: number | null;
+  home_pen_saves?: number | null;
+  away_pen_saves?: number | null;
+  /** Jokers / guests who played this match, and for which side. */
+  guests?: MatchGuest[];
   events?: MatchEvent[];
 }
 

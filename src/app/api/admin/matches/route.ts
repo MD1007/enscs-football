@@ -92,6 +92,15 @@ export async function PUT(request: Request) {
         shots_on_target_away: shots_on_target_away !== undefined && shots_on_target_away !== '' && shots_on_target_away !== null ? Number(shots_on_target_away) : null,
         fouls_home: fouls_home !== undefined && fouls_home !== '' && fouls_home !== null ? Number(fouls_home) : null,
         fouls_away: fouls_away !== undefined && fouls_away !== '' && fouls_away !== null ? Number(fouls_away) : null,
+        // Goalkeepers, saves and guests: only changed when the request includes them,
+        // so an older open admin tab can never wipe them.
+        home_gk_id: body.home_gk_id !== undefined ? (body.home_gk_id ? Number(body.home_gk_id) : null) : undefined,
+        away_gk_id: body.away_gk_id !== undefined ? (body.away_gk_id ? Number(body.away_gk_id) : null) : undefined,
+        home_saves: body.home_saves !== undefined ? Number(body.home_saves) || 0 : undefined,
+        away_saves: body.away_saves !== undefined ? Number(body.away_saves) || 0 : undefined,
+        home_pen_saves: body.home_pen_saves !== undefined ? Number(body.home_pen_saves) || 0 : undefined,
+        away_pen_saves: body.away_pen_saves !== undefined ? Number(body.away_pen_saves) || 0 : undefined,
+        guests: Array.isArray(body.guests) ? body.guests : undefined,
         events: events || [],
       },
       admin.username

@@ -34,14 +34,21 @@ export default function PlayerProfilePage({ params }: PlayerProfilePageProps) {
 
   const team = data.teams.find((t) => t.id === player.team_id);
 
+  // A joker has no team of his own: his history is the matches he guested in,
+  // each one seen from the side he played for.
+  const guestSideIn = (m: (typeof data.matches)[number]): number | null =>
+    (m.guests || []).find((g) => g.player_id === player.id)?.team_id ??
+    (m.events || []).find((e) => e.player_id === player.id)?.team_id ??
+    null;
+
   // Player matches history
-  const teamMatches = data.matches.filter(
-    (m) => m.home_team_id === player.team_id || m.away_team_id === player.team_id
-  );
+  const teamMatches = player.is_joker
+    ? data.matches.filter((m) => guestSideIn(m) !== null)
+    : data.matches.filter((m) => m.home_team_id === player.team_id || m.away_team_id === player.team_id);
 
   // Parse match performance breakdown
   const matchHistory = teamMatches.map((m) => {
-    const isHome = m.home_team_id === player.team_id;
+    const isHome = m.home_team_id === (player.is_joker ? guestSideIn(m) : player.team_id);
     const opponentTeamName = isHome ? m.away_team_name : m.home_team_name;
     const opponentTeamColor = isHome ? m.away_team_color : m.home_team_color;
     const teamScore = isHome ? m.home_score : m.away_score;
@@ -100,11 +107,11 @@ export default function PlayerProfilePage({ params }: PlayerProfilePageProps) {
       {/* Back Button */}
       <div>
         <Link
-          href={`/teams/${team?.id || ''}`}
+          href={team ? `/teams/${team.id}` : '/teams'}
           className="inline-flex items-center space-x-2 text-xs font-bold text-slate-400 hover:text-white transition group"
         >
           <ArrowLeft className="w-4 h-4 transition group-hover:-translate-x-1 text-emerald-400" />
-          <span dir="auto">Back to {team?.name || 'Tournament'}</span>
+          <span dir="auto">Back to {team?.name || 'Teams'}</span>
         </Link>
       </div>
 
@@ -155,8 +162,16 @@ export default function PlayerProfilePage({ params }: PlayerProfilePageProps) {
                   className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider text-pitch-darkest"
                   style={{ backgroundColor: teamColor }}
                 >
-                  {team?.name || 'Tournament'}
+                  {player.is_joker ? `🃏 ${player.team_name || 'Joker'}` : team?.name || 'Tournament'}
                 </span>
+                {(player.matches_as_gk || 0) > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-200 border border-blue-400/40">
+                    🧤 Goalkeeper · {player.matches_as_gk} match{player.matches_as_gk === 1 ? '' : 'es'}
+                    {(player.gk_goals || 0) > 0 ? ` · ${player.gk_goals} goal${player.gk_goals === 1 ? '' : 's'} as GK` : ''}
+                    {(player.gk_assists || 0) > 0 ? ` · ${player.gk_assists} assist${player.gk_assists === 1 ? '' : 's'} as GK` : ''}
+                    {(player.penalty_saves || 0) > 0 ? ` · ${player.penalty_saves} pen saved` : ''}
+                  </span>
+                )}
                 {player.is_captain && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/40">
                     Captain (C)

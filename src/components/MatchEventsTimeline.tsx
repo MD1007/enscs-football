@@ -64,6 +64,22 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                       <span dir="auto" className="font-bold text-white text-xs sm:text-sm truncate">
                         {ev.player_name || 'Player'}
                       </span>
+                      {ev.player_is_gk && (
+                        <span
+                          className="flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-blue-200 bg-blue-500/20 border border-blue-400/40 px-1 rounded"
+                          title="Goalkeeper in this match"
+                        >
+                          🧤 GK
+                        </span>
+                      )}
+                      {ev.player_is_guest && (
+                        <span
+                          className="flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-purple-200 bg-purple-500/20 border border-purple-400/40 px-1 rounded"
+                          title="Joker (guest player)"
+                        >
+                          🃏
+                        </span>
+                      )}
                       <span className="text-sm sm:text-base flex-shrink-0">
                         {isGoal ? (isOwnGoal ? '⚠️' : '⚽') : isYellow ? '🟨' : isRed ? '🟥' : '👟'}
                       </span>
@@ -86,6 +102,11 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                       <div className="text-[10px] sm:text-xs text-slate-400 flex items-center justify-end space-x-1 truncate" dir="auto">
                         <span className="text-blue-400 font-medium">Assist:</span>
                         <span dir="auto" className="truncate">{ev.assister_name}</span>
+                        {ev.assister_is_gk && (
+                          <span className="flex-shrink-0 text-blue-300 font-bold" title="Goalkeeper in this match">
+                            🧤 GK
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -119,6 +140,22 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                       <span dir="auto" className="font-bold text-white text-xs sm:text-sm truncate">
                         {ev.player_name || 'Player'}
                       </span>
+                      {ev.player_is_gk && (
+                        <span
+                          className="flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-blue-200 bg-blue-500/20 border border-blue-400/40 px-1 rounded"
+                          title="Goalkeeper in this match"
+                        >
+                          🧤 GK
+                        </span>
+                      )}
+                      {ev.player_is_guest && (
+                        <span
+                          className="flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-purple-200 bg-purple-500/20 border border-purple-400/40 px-1 rounded"
+                          title="Joker (guest player)"
+                        >
+                          🃏
+                        </span>
+                      )}
                     </div>
 
                     {/* Sub details: Assist or Penalty or Own Goal */}
@@ -138,6 +175,11 @@ export default function MatchEventsTimeline({ match, events }: MatchEventsTimeli
                       <div className="text-[10px] sm:text-xs text-slate-400 flex items-center space-x-1 truncate" dir="auto">
                         <span className="text-blue-400 font-medium">Assist:</span>
                         <span dir="auto" className="truncate">{ev.assister_name}</span>
+                        {ev.assister_is_gk && (
+                          <span className="flex-shrink-0 text-blue-300 font-bold" title="Goalkeeper in this match">
+                            🧤 GK
+                          </span>
+                        )}
                       </div>
                     )}
 

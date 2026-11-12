@@ -1,4 +1,4 @@
-import { Team, Player, Match, GroupId, StandingRow, MatchEvent, TeamOfTournamentData, TeamOfTournamentPlayer } from './types';
+import { Team, Player, Match, GroupId, StandingRow, MatchEvent, MatchGuest, TeamOfTournamentData, TeamOfTournamentPlayer } from './types';
 
 /**
  * Calculates standings for a group according to official tournament rules:
@@ -189,6 +189,44 @@ export function calculateBestSecondPlace(
   return secondPlaces;
 }
 
+/** Jokers / guests recorded on a match, with the side they played for. */
+export function getMatchGuests(m: Match): MatchGuest[] {
+  if (Array.isArray(m.guests)) return m.guests;
+  const raw = (m as unknown as { guests_json?: string | null }).guests_json;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((g) => g && Number(g.player_id) > 0 && Number(g.team_id) > 0)
+      .map((g) => ({ player_id: Number(g.player_id), team_id: Number(g.team_id) }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Goalkeeper of one side in one match: the keeper chosen for that match,
+ * otherwise the team's usual keeper.
+ */
+export function getMatchGoalkeeperId(
+  m: Match,
+  side: 'home' | 'away',
+  players: Player[],
+  teams?: Team[]
+): number | null {
+  const explicit = side === 'home' ? m.home_gk_id : m.away_gk_id;
+  if (explicit) return Number(explicit);
+  const teamId = side === 'home' ? m.home_team_id : m.away_team_id;
+  if (!teamId) return null;
+  const team = teams?.find((t) => t.id === teamId);
+  if (team?.goalkeeper_id) return team.goalkeeper_id;
+  return (
+    players.find((p) => p.team_id === teamId && !p.is_joker && (p.is_goalkeeper || p.position === 'Goalkeeper'))?.id ??
+    null
+  );
+}
+
 /**
  * Aggregates player stats: Goals, Assists, Cards from match events
  */
@@ -219,6 +257,10 @@ export function aggregatePlayerStats(
       clean_sheets: 0,
       goals_conceded: 0,
       matches_as_gk: 0,
+      gk_goals: 0,
+      gk_assists: 0,
+      saves: 0,
+      penalty_saves: 0,
       overall_points: 0,
       nicknames: [],
     };
@@ -227,70 +269,75 @@ export function aggregatePlayerStats(
   // Track assists to avoid double-counting between linked events
   const countedAssists = new Set<string>();
 
+  // Per-match goalkeepers and the teams each joker has played for
+  const matchKeepers: Record<number, { home: number | null; away: number | null }> = {};
+  const guestTeams: Record<number, Set<string>> = {};
+
   // Collect all events, appearances, and MVPs from matches
   for (const m of matches) {
+    // Who kept goal for each side in this match, and which jokers played.
+    const guests = getMatchGuests(m);
+    const guestIds = new Set(guests.map((g) => g.player_id));
+    const homeGKId = getMatchGoalkeeperId(m, 'home', players, teams);
+    const awayGKId = getMatchGoalkeeperId(m, 'away', players, teams);
+    matchKeepers[m.id] = { home: homeGKId, away: awayGKId };
+
+    // Jokers: remember which teams they turned out for.
+    for (const g of guests) {
+      const name = teamMap[g.team_id]?.name;
+      if (name && playerMap[g.player_id]) {
+        if (!guestTeams[g.player_id]) guestTeams[g.player_id] = new Set();
+        guestTeams[g.player_id].add(name);
+      }
+    }
+
     if (m.status === 'finished') {
       const homeScore = m.home_score ?? 0;
       const awayScore = m.away_score ?? 0;
 
-      // Count appearances for finished matches
+      // Appearances. Squad members: every finished match of their team.
+      // Jokers: only the matches they were actually part of.
+      const involved = new Set<number>(guestIds);
+      for (const ev of m.events || []) {
+        involved.add(ev.player_id);
+        if (ev.assister_id) involved.add(ev.assister_id);
+      }
+      if (homeGKId) involved.add(homeGKId);
+      if (awayGKId) involved.add(awayGKId);
+
       players.forEach((p) => {
-        if (p.team_id === m.home_team_id || p.team_id === m.away_team_id) {
-          if (playerMap[p.id]) {
-            playerMap[p.id].matches_played = (playerMap[p.id].matches_played || 0) + 1;
-          }
+        if (!playerMap[p.id]) return;
+        const inSquad = !p.is_joker && (p.team_id === m.home_team_id || p.team_id === m.away_team_id);
+        const asGuest = (p.is_joker || guestIds.has(p.id)) && involved.has(p.id);
+        if (inSquad || asGuest) {
+          playerMap[p.id].matches_played = (playerMap[p.id].matches_played || 0) + 1;
         }
       });
 
-      // 1. Identify Home Team Goalkeeper and Clean Sheet / Goals Conceded
-      const homeTeam = teamMap[m.home_team_id];
-      const homeGKId =
-        homeTeam?.goalkeeper_id ||
-        players.find((p) => p.team_id === m.home_team_id && (p.is_goalkeeper || p.position === 'Goalkeeper'))?.id;
+      // Goalkeepers: clean sheets, goals conceded, saves and penalty saves.
+      const creditKeeper = (gkId: number | null, conceded: number, saves: number, penSaves: number) => {
+        if (!gkId || !playerMap[gkId]) return;
+        const gk = playerMap[gkId];
+        gk.matches_as_gk = (gk.matches_as_gk || 0) + 1;
+        gk.goals_conceded = (gk.goals_conceded || 0) + conceded;
+        gk.saves = (gk.saves || 0) + saves;
+        gk.penalty_saves = (gk.penalty_saves || 0) + penSaves;
+        if (conceded === 0) gk.clean_sheets = (gk.clean_sheets || 0) + 1;
+      };
+      creditKeeper(homeGKId, awayScore, Number(m.home_saves) || 0, Number(m.home_pen_saves) || 0);
+      creditKeeper(awayGKId, homeScore, Number(m.away_saves) || 0, Number(m.away_pen_saves) || 0);
 
-      if (homeGKId && playerMap[homeGKId]) {
-        playerMap[homeGKId].matches_as_gk = (playerMap[homeGKId].matches_as_gk || 0) + 1;
-        playerMap[homeGKId].goals_conceded = (playerMap[homeGKId].goals_conceded || 0) + awayScore;
-        if (awayScore === 0) {
-          playerMap[homeGKId].clean_sheets = (playerMap[homeGKId].clean_sheets || 0) + 1;
-        }
-      }
-
-      // Home Defenders Clean Sheet Contribution
-      if (awayScore === 0) {
+      // Defenders share clean sheets (the keeper is credited above).
+      const creditDefenders = (teamId: number, conceded: number, gkId: number | null) => {
+        if (conceded !== 0) return;
         players
-          .filter((p) => p.team_id === m.home_team_id && p.position === 'Defender')
+          .filter((p) => p.team_id === teamId && p.position === 'Defender' && p.id !== gkId)
           .forEach((def) => {
-            if (playerMap[def.id]) {
-              playerMap[def.id].clean_sheets = (playerMap[def.id].clean_sheets || 0) + 1;
-            }
+            if (playerMap[def.id]) playerMap[def.id].clean_sheets = (playerMap[def.id].clean_sheets || 0) + 1;
           });
-      }
-
-      // 2. Identify Away Team Goalkeeper and Clean Sheet / Goals Conceded
-      const awayTeam = teamMap[m.away_team_id];
-      const awayGKId =
-        awayTeam?.goalkeeper_id ||
-        players.find((p) => p.team_id === m.away_team_id && (p.is_goalkeeper || p.position === 'Goalkeeper'))?.id;
-
-      if (awayGKId && playerMap[awayGKId]) {
-        playerMap[awayGKId].matches_as_gk = (playerMap[awayGKId].matches_as_gk || 0) + 1;
-        playerMap[awayGKId].goals_conceded = (playerMap[awayGKId].goals_conceded || 0) + homeScore;
-        if (homeScore === 0) {
-          playerMap[awayGKId].clean_sheets = (playerMap[awayGKId].clean_sheets || 0) + 1;
-        }
-      }
-
-      // Away Defenders Clean Sheet Contribution
-      if (homeScore === 0) {
-        players
-          .filter((p) => p.team_id === m.away_team_id && p.position === 'Defender')
-          .forEach((def) => {
-            if (playerMap[def.id]) {
-              playerMap[def.id].clean_sheets = (playerMap[def.id].clean_sheets || 0) + 1;
-            }
-          });
-      }
+      };
+      creditDefenders(m.home_team_id, awayScore, homeGKId);
+      creditDefenders(m.away_team_id, homeScore, awayGKId);
     }
 
     if (m.mvp_player_id && playerMap[m.mvp_player_id]) {
@@ -298,6 +345,7 @@ export function aggregatePlayerStats(
     }
 
     if (!m.events) continue;
+    const isKeeperHere = (playerId: number) => playerId === homeGKId || playerId === awayGKId;
     for (const ev of m.events) {
       const p = playerMap[ev.player_id];
 
@@ -305,6 +353,7 @@ export function aggregatePlayerStats(
       if (ev.event_type === 'goal') {
         if (ev.sub_type !== 'own_goal' && p) {
           p.goals = (p.goals || 0) + 1;
+          if (isKeeperHere(ev.player_id)) p.gk_goals = (p.gk_goals || 0) + 1;
         }
 
         // Direct assist on goal event
@@ -312,7 +361,9 @@ export function aggregatePlayerStats(
           const assistKey = `goal-${ev.id || m.id}-${ev.assister_id}-${ev.minute || 0}`;
           if (!countedAssists.has(assistKey)) {
             countedAssists.add(assistKey);
-            playerMap[ev.assister_id].assists = (playerMap[ev.assister_id].assists || 0) + 1;
+            const assister = playerMap[ev.assister_id];
+            assister.assists = (assister.assists || 0) + 1;
+            if (isKeeperHere(ev.assister_id)) assister.gk_assists = (assister.gk_assists || 0) + 1;
           }
         }
       } else if (ev.event_type === 'assist' && p) {
@@ -320,6 +371,7 @@ export function aggregatePlayerStats(
         if (!countedAssists.has(assistKey)) {
           countedAssists.add(assistKey);
           p.assists = (p.assists || 0) + 1;
+          if (isKeeperHere(ev.player_id)) p.gk_assists = (p.gk_assists || 0) + 1;
         }
       } else if (ev.event_type === 'yellow_card' && p) {
         p.yellow_cards = (p.yellow_cards || 0) + 1;
@@ -340,7 +392,19 @@ export function aggregatePlayerStats(
     def_clean_sheet: customWeights?.def_clean_sheet ?? 2,
     yellow_card: customWeights?.yellow_card ?? -1,
     red_card: customWeights?.red_card ?? -3,
+    // Goalkeeper bonuses: a goal or assist by the keeper is worth far more
+    gk_goal: customWeights?.gk_goal ?? 15,
+    gk_assist: customWeights?.gk_assist ?? 6,
+    gk_save: customWeights?.gk_save ?? 1,
+    gk_penalty_save: customWeights?.gk_penalty_save ?? 5,
   };
+
+  // Jokers show the teams they guested for instead of the hidden squad's name
+  for (const p of allPlayersWithStats) {
+    if (!p.is_joker) continue;
+    p.guest_teams = guestTeams[p.id] ? Array.from(guestTeams[p.id]) : [];
+    p.team_name = p.guest_teams.length > 0 ? `Joker · ${p.guest_teams.join(' / ')}` : 'Joker';
+  }
 
   // Calculate Ratios and Overall Performance Points
   for (const p of allPlayersWithStats) {
@@ -349,15 +413,24 @@ export function aggregatePlayerStats(
     p.clean_sheet_percentage = (p.matches_as_gk || 0) > 0 ? Number((((p.clean_sheets || 0) / p.matches_as_gk!) * 100).toFixed(1)) : 0;
     p.goals_conceded_per_match = (p.matches_as_gk || 0) > 0 ? Number(((p.goals_conceded || 0) / p.matches_as_gk!).toFixed(2)) : 0;
 
-    const isGK = p.is_goalkeeper || p.position === 'Goalkeeper';
-    const isDEF = p.position === 'Defender';
+    // Anyone who actually kept goal in a match counts as a keeper for these bonuses.
+    const isGK = (p.matches_as_gk || 0) > 0 || p.is_goalkeeper || p.position === 'Goalkeeper';
+    const isDEF = !isGK && p.position === 'Defender';
     const gkCleanSheetPoints = isGK ? (p.clean_sheets || 0) * weights.gk_clean_sheet : 0;
     const defCleanSheetPoints = isDEF ? (p.clean_sheets || 0) * weights.def_clean_sheet : 0;
 
+    // Goals / assists made while in goal use the keeper weights, the rest the normal ones.
+    const gkGoals = Math.min(p.gk_goals || 0, p.goals || 0);
+    const gkAssists = Math.min(p.gk_assists || 0, p.assists || 0);
+
     p.overall_points = Math.max(
       0,
-      (p.goals || 0) * weights.goal +
-        (p.assists || 0) * weights.assist +
+      ((p.goals || 0) - gkGoals) * weights.goal +
+        gkGoals * weights.gk_goal +
+        ((p.assists || 0) - gkAssists) * weights.assist +
+        gkAssists * weights.gk_assist +
+        (p.saves || 0) * weights.gk_save +
+        (p.penalty_saves || 0) * weights.gk_penalty_save +
         (p.mvps || 0) * weights.motm +
         gkCleanSheetPoints +
         defCleanSheetPoints +
@@ -366,6 +439,7 @@ export function aggregatePlayerStats(
         (p.red_cards || 0) * weights.red_card
     );
   }
+  void matchKeepers;
 
   // 1. Golden Boot: Top scorers (goals > 0, excluding own goals)
   const topScorers = allPlayersWithStats
@@ -404,7 +478,7 @@ export function aggregatePlayerStats(
 
   // 4. Best Goalkeeper Ranking
   const allGoalkeepers = allPlayersWithStats.filter(
-    (p) => p.is_goalkeeper || p.position === 'Goalkeeper' || (p.matches_as_gk || 0) > 0
+    (p) => (p.matches_as_gk || 0) > 0 || (!p.is_joker && (p.is_goalkeeper || p.position === 'Goalkeeper'))
   );
 
   const bestGoalkeepers = allGoalkeepers
@@ -415,6 +489,9 @@ export function aggregatePlayerStats(
       if ((b.clean_sheet_percentage || 0) !== (a.clean_sheet_percentage || 0)) return (b.clean_sheet_percentage || 0) - (a.clean_sheet_percentage || 0);
       // 3. Goals conceded per match (lower is better)
       if ((a.goals_conceded_per_match || 0) !== (b.goals_conceded_per_match || 0)) return (a.goals_conceded_per_match || 0) - (b.goals_conceded_per_match || 0);
+      // 4. Penalty saves, then great saves
+      if ((b.penalty_saves || 0) !== (a.penalty_saves || 0)) return (b.penalty_saves || 0) - (a.penalty_saves || 0);
+      if ((b.saves || 0) !== (a.saves || 0)) return (b.saves || 0) - (a.saves || 0);
       return (b.matches_as_gk || 0) - (a.matches_as_gk || 0);
     })
     .map((player, idx, arr) => {
@@ -430,6 +507,7 @@ export function aggregatePlayerStats(
         clean_sheets: player.clean_sheets || 0,
         goals_conceded: player.goals_conceded || 0,
         clean_sheet_percentage: player.clean_sheet_percentage || 0,
+        penalty_saves: player.penalty_saves || 0,
         appearances: player.matches_as_gk || player.matches_played || 0,
         rank: idx + 1,
         is_tied,
@@ -574,6 +652,9 @@ export function aggregatePlayerStats(
  * Rule 1: Winning team priority! (If match has a winner, MVP MUST come from the winning team).
  * Rule 2: Draws evaluate all players across both teams.
  * Rule 3: Weighted fair formula (Goals +5, Assists +3, Clean sheet +4, Yellow -1, Red -4, Own Goal -3).
+ * Rule 4: Goalkeepers are rated on a keeper's job: clean sheet +12, each great save +1,
+ *         penalty save +4, and a keeper who scores (+10) or assists (+5) is rewarded extra.
+ * Jokers (guests) count for the side they played for in this match.
  */
 export function calculateMatchMVP(
   match: Match,
@@ -585,6 +666,11 @@ export function calculateMatchMVP(
     cleanSheet: 4,
     yellowCard: -1,
     redCard: -4,
+    gkGoal: 10,
+    gkAssist: 5,
+    gkCleanSheet: 12,
+    gkSave: 1,
+    gkPenaltySave: 4,
   }
 ) {
   const homeScore = match.home_score ?? 0;
@@ -601,17 +687,29 @@ export function calculateMatchMVP(
     }
   }
 
-  // Get all players for both participating teams
-  const matchPlayers = players.filter(
-    (p) => p.team_id === match.home_team_id || p.team_id === match.away_team_id
-  );
+  // Side each player is on in THIS match: guests play for the team they were added to.
+  const guestSide: Record<number, number> = {};
+  for (const g of getMatchGuests(match)) guestSide[g.player_id] = g.team_id;
+  const sideOf = (p: Player): number | null => {
+    if (guestSide[p.id]) return guestSide[p.id];
+    if (p.is_joker) return null;
+    return p.team_id === match.home_team_id || p.team_id === match.away_team_id ? p.team_id : null;
+  };
+
+  const homeGKId = getMatchGoalkeeperId(match, 'home', players);
+  const awayGKId = getMatchGoalkeeperId(match, 'away', players);
+  const isKeeper = (playerId: number) => playerId === homeGKId || playerId === awayGKId;
+
+  const matchPlayers = players.filter((p) => sideOf(p) !== null);
 
   const scoresMap: Record<
     number,
     {
       player: Player;
+      teamId: number;
       score: number;
       isWinner: boolean;
+      isGoalkeeper: boolean;
       breakdown: {
         goals: number;
         assists: number;
@@ -619,16 +717,23 @@ export function calculateMatchMVP(
         redCards: number;
         ownGoals: number;
         cleanSheet: boolean;
+        saves: number;
+        penaltySaves: number;
       };
     }
   > = {};
 
+  const matchCounts = match.status === 'finished' || match.status === 'live';
+
   for (const p of matchPlayers) {
-    const isWinner = winnerTeamId ? p.team_id === winnerTeamId : false;
+    const teamId = sideOf(p) as number;
+    const keeper = isKeeper(p.id);
     scoresMap[p.id] = {
       player: p,
+      teamId,
       score: 0,
-      isWinner,
+      isWinner: winnerTeamId ? teamId === winnerTeamId : false,
+      isGoalkeeper: keeper,
       breakdown: {
         goals: 0,
         assists: 0,
@@ -636,16 +741,28 @@ export function calculateMatchMVP(
         redCards: 0,
         ownGoals: 0,
         cleanSheet: false,
+        saves: 0,
+        penaltySaves: 0,
       },
     };
 
-    // Clean sheet bonus: if team conceded 0 in a finished match
-    if (match.status === 'finished' || match.status === 'live') {
-      const conceded = p.team_id === match.home_team_id ? awayScore : homeScore;
-      if (conceded === 0) {
-        scoresMap[p.id].score += weights.cleanSheet;
-        scoresMap[p.id].breakdown.cleanSheet = true;
-      }
+    if (!matchCounts) continue;
+    const isHomeSide = teamId === match.home_team_id;
+
+    // Clean sheet bonus: the keeper earns the most for it
+    const conceded = isHomeSide ? awayScore : homeScore;
+    if (conceded === 0) {
+      scoresMap[p.id].score += keeper ? weights.gkCleanSheet : weights.cleanSheet;
+      scoresMap[p.id].breakdown.cleanSheet = true;
+    }
+
+    // Saves and penalty saves belong to the keeper of that side
+    if (keeper) {
+      const saves = Number(isHomeSide ? match.home_saves : match.away_saves) || 0;
+      const penSaves = Number(isHomeSide ? match.home_pen_saves : match.away_pen_saves) || 0;
+      scoresMap[p.id].score += saves * weights.gkSave + penSaves * weights.gkPenaltySave;
+      scoresMap[p.id].breakdown.saves = saves;
+      scoresMap[p.id].breakdown.penaltySaves = penSaves;
     }
   }
 
@@ -659,16 +776,16 @@ export function calculateMatchMVP(
         }
       } else {
         if (scoresMap[ev.player_id]) {
-          scoresMap[ev.player_id].score += weights.goal;
+          scoresMap[ev.player_id].score += isKeeper(ev.player_id) ? weights.gkGoal : weights.goal;
           scoresMap[ev.player_id].breakdown.goals += 1;
         }
         if (ev.assister_id && scoresMap[ev.assister_id]) {
-          scoresMap[ev.assister_id].score += weights.assist;
+          scoresMap[ev.assister_id].score += isKeeper(ev.assister_id) ? weights.gkAssist : weights.assist;
           scoresMap[ev.assister_id].breakdown.assists += 1;
         }
       }
     } else if (ev.event_type === 'assist' && scoresMap[ev.player_id]) {
-      scoresMap[ev.player_id].score += weights.assist;
+      scoresMap[ev.player_id].score += isKeeper(ev.player_id) ? weights.gkAssist : weights.assist;
       scoresMap[ev.player_id].breakdown.assists += 1;
     } else if (ev.event_type === 'yellow_card' && scoresMap[ev.player_id]) {
       scoresMap[ev.player_id].score += weights.yellowCard;
@@ -685,7 +802,7 @@ export function calculateMatchMVP(
   // If match has a winner, ONLY players from the winning team are eligible for the Automatic MVP!
   let eligibleCandidates = allScores;
   if (winnerTeamId !== null) {
-    const winningCandidates = allScores.filter((c) => c.player.team_id === winnerTeamId);
+    const winningCandidates = allScores.filter((c) => c.teamId === winnerTeamId);
     if (winningCandidates.length > 0) {
       eligibleCandidates = winningCandidates;
     }

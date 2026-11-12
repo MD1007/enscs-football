@@ -1,5 +1,7 @@
-import db, { initDatabase, logActivity } from './db';
+import db, { initDatabase, logActivity, JOKER_GROUP } from './db';
 import {
+  getMatchGuests,
+  getMatchGoalkeeperId,
   calculateGroupStandings,
   calculateBestSecondPlace,
   aggregatePlayerStats,
@@ -37,12 +39,13 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
   `).all() as any[];
 
   // 2. Players
-  const playersRaw = db.prepare(`
-    SELECT p.*, t.name as team_name
+  // Jokers (guest players) sit in a hidden squad that is never listed as a team.
+  const playersRaw = (db.prepare(`
+    SELECT p.*, t.name as team_name, t.group_id as team_group
     FROM players p
     JOIN teams t ON p.team_id = t.id
     ORDER BY p.team_id ASC, p.is_captain DESC, p.name ASC
-  `).all() as any[];
+  `).all() as any[]).map(({ team_group, ...p }) => ({ ...p, is_joker: team_group === JOKER_GROUP }));
 
   // Map players into teams
   const playersByTeam: Record<number, Player[]> = {};
@@ -56,10 +59,12 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     });
   }
 
-  const teams: Team[] = teamsRaw.map((t) => ({
-    ...t,
-    players: playersByTeam[t.id] || [],
-  }));
+  const teams: Team[] = teamsRaw
+    .filter((t) => t.group_id !== JOKER_GROUP)
+    .map((t) => ({
+      ...t,
+      players: playersByTeam[t.id] || [],
+    }));
 
   // 3. Matches & Events
   const matchesRaw = db.prepare(`
@@ -101,11 +106,36 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     eventsByMatch[ev.match_id].push(ev);
   }
 
-  const matches: Match[] = matchesRaw.map((m) => ({
-    ...m,
-    is_time_set: Boolean(m.is_time_set),
-    events: eventsByMatch[m.id] || [],
-  }));
+  const playerNameById: Record<number, string> = {};
+  const jokerIds = new Set<number>();
+  for (const p of playersRaw) {
+    playerNameById[p.id] = p.name;
+    if (p.is_joker) jokerIds.add(p.id);
+  }
+
+  const matches: Match[] = matchesRaw.map(({ guests_json, ...m }) => {
+    const match: Match = {
+      ...m,
+      is_time_set: Boolean(m.is_time_set),
+      guests: getMatchGuests({ guests_json } as any)
+        .filter((g) => playerNameById[g.player_id])
+        .map((g) => ({ ...g, player_name: playerNameById[g.player_id] })),
+      events: eventsByMatch[m.id] || [],
+    };
+
+    // Mark events made by that match's goalkeeper or by a guest player.
+    const homeGK = getMatchGoalkeeperId(match, 'home', playersRaw, teams);
+    const awayGK = getMatchGoalkeeperId(match, 'away', playersRaw, teams);
+    const guestIds = new Set((match.guests || []).map((g) => g.player_id));
+    match.events = (match.events || []).map((ev) => ({
+      ...ev,
+      player_is_gk: ev.player_id === homeGK || ev.player_id === awayGK,
+      assister_is_gk: Boolean(ev.assister_id) && (ev.assister_id === homeGK || ev.assister_id === awayGK),
+      player_is_guest: guestIds.has(ev.player_id) || jokerIds.has(ev.player_id),
+      assister_is_guest: Boolean(ev.assister_id) && (guestIds.has(ev.assister_id!) || jokerIds.has(ev.assister_id!)),
+    }));
+    return match;
+  });
 
   // 4. Tournament Rules
   const rules = db.prepare('SELECT * FROM tournament_rules ORDER BY display_order ASC').all() as TournamentRule[];
@@ -125,6 +155,10 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     def_clean_sheet: Number(settings.mvp_weight_def_clean_sheet ?? 2),
     yellow_card: Number(settings.mvp_weight_yellow_card ?? -1),
     red_card: Number(settings.mvp_weight_red_card ?? -3),
+    gk_goal: Number(settings.mvp_weight_gk_goal ?? 15),
+    gk_assist: Number(settings.mvp_weight_gk_assist ?? 6),
+    gk_save: Number(settings.mvp_weight_gk_save ?? 1),
+    gk_penalty_save: Number(settings.mvp_weight_gk_penalty_save ?? 5),
   };
   const minAppearances = Number(settings.pot_min_appearances ?? 3);
 
@@ -159,6 +193,16 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     customWeights,
     minAppearances
   );
+
+  // Great-save counts are for the organiser only: visitors never receive them.
+  // (The points they earn still count towards totals.)
+  if (!options?.isAdmin) {
+    for (const p of playersWithStats) delete p.saves;
+    for (const m of matches) {
+      m.home_saves = null;
+      m.away_saves = null;
+    }
+  }
 
   // 7. Summary metrics
   const matchesPlayed = matches.filter((m) => m.status === 'finished').length;
@@ -502,6 +546,14 @@ export function updateMatchResult(
     shots_on_target_away?: number | null;
     fouls_home?: number | null;
     fouls_away?: number | null;
+    // Goalkeepers, saves and guests. `undefined` keeps what is already stored.
+    home_gk_id?: number | null;
+    away_gk_id?: number | null;
+    home_saves?: number;
+    away_saves?: number;
+    home_pen_saves?: number;
+    away_pen_saves?: number;
+    guests?: { player_id: number; team_id: number }[];
     events: Array<{
       player_id: number;
       team_id: number;
@@ -524,6 +576,44 @@ export function updateMatchResult(
 
   if (!match) throw new Error('Match not found');
 
+  // Guests must be real players, on one of the two sides, and not already in that side's squad.
+  const cleanGuests = (list: { player_id: number; team_id: number }[]) => {
+    const seen = new Set<number>();
+    const out: { player_id: number; team_id: number }[] = [];
+    const findPlayer = db.prepare('SELECT id, team_id FROM players WHERE id = ?');
+    for (const g of list) {
+      const playerId = Number(g.player_id);
+      const teamId = Number(g.team_id);
+      if (!playerId || seen.has(playerId)) continue;
+      if (teamId !== match.home_team_id && teamId !== match.away_team_id) continue;
+      const row = findPlayer.get(playerId) as { id: number; team_id: number } | undefined;
+      if (!row || row.team_id === match.home_team_id || row.team_id === match.away_team_id) continue;
+      seen.add(playerId);
+      out.push({ player_id: playerId, team_id: teamId });
+    }
+    return out;
+  };
+
+  const previousGuests = getMatchGuests(match);
+  const guests = data.guests !== undefined ? cleanGuests(data.guests) : previousGuests;
+  const guestIds = guests.map((g) => g.player_id);
+
+  // A keeper must belong to that side (squad member or guest of that side); otherwise fall back to the team default.
+  const validKeeper = (gkId: number | null | undefined, teamId: number): number | null => {
+    if (!gkId) return null;
+    if (guests.some((g) => g.player_id === gkId && g.team_id === teamId)) return gkId;
+    const row = db.prepare('SELECT team_id FROM players WHERE id = ?').get(gkId) as { team_id: number } | undefined;
+    return row && row.team_id === teamId ? gkId : null;
+  };
+  const homeGkId = validKeeper(data.home_gk_id !== undefined ? data.home_gk_id : match.home_gk_id, match.home_team_id);
+  const awayGkId = validKeeper(data.away_gk_id !== undefined ? data.away_gk_id : match.away_gk_id, match.away_team_id);
+  const count = (next: number | undefined, current: unknown) =>
+    Math.max(0, Math.min(999, Math.round(Number(next !== undefined ? next : current) || 0)));
+  const homeSaves = count(data.home_saves, match.home_saves);
+  const awaySaves = count(data.away_saves, match.away_saves);
+  const homePenSaves = count(data.home_pen_saves, match.home_pen_saves);
+  const awayPenSaves = count(data.away_pen_saves, match.away_pen_saves);
+
   const transaction = db.transaction(() => {
     let finalMvpPlayerId = data.mvp_player_id !== undefined ? data.mvp_player_id : match.mvp_player_id;
     let finalMvpScore = data.mvp_score !== undefined ? data.mvp_score : match.mvp_score;
@@ -539,12 +629,26 @@ export function updateMatchResult(
         away_penalties: data.away_penalties,
         status: data.status as any,
         winner_team_id: data.winner_team_id,
+        home_gk_id: homeGkId,
+        away_gk_id: awayGkId,
+        home_saves: homeSaves,
+        away_saves: awaySaves,
+        home_pen_saves: homePenSaves,
+        away_pen_saves: awayPenSaves,
+        guests,
       };
 
-      const matchPlayers = db.prepare('SELECT * FROM players WHERE team_id IN (?, ?)').all(
+      // Both squads plus this match's guests
+      const squadPlayers = db.prepare('SELECT * FROM players WHERE team_id IN (?, ?)').all(
         match.home_team_id,
         match.away_team_id
       ) as Player[];
+      const guestPlayers = guestIds.length
+        ? (db
+            .prepare(`SELECT * FROM players WHERE id IN (${guestIds.map(() => '?').join(',')})`)
+            .all(...guestIds) as Player[])
+        : [];
+      const matchPlayers = [...squadPlayers, ...guestPlayers];
 
       const formattedEvents: MatchEvent[] = (data.events || []).map((e, idx) => ({
         id: idx + 1,
@@ -582,7 +686,14 @@ export function updateMatchResult(
           shots_on_target_home = ?,
           shots_on_target_away = ?,
           fouls_home = ?,
-          fouls_away = ?
+          fouls_away = ?,
+          home_gk_id = ?,
+          away_gk_id = ?,
+          home_saves = ?,
+          away_saves = ?,
+          home_pen_saves = ?,
+          away_pen_saves = ?,
+          guests_json = ?
       WHERE id = ?
     `).run(
       data.home_score,
@@ -602,6 +713,13 @@ export function updateMatchResult(
       data.shots_on_target_away !== undefined && data.shots_on_target_away !== null ? Number(data.shots_on_target_away) : null,
       data.fouls_home !== undefined && data.fouls_home !== null ? Number(data.fouls_home) : null,
       data.fouls_away !== undefined && data.fouls_away !== null ? Number(data.fouls_away) : null,
+      homeGkId,
+      awayGkId,
+      homeSaves,
+      awaySaves,
+      homePenSaves,
+      awayPenSaves,
+      guests.length > 0 ? JSON.stringify(guests) : null,
       matchId
     );
 
@@ -906,6 +1024,10 @@ export function updateScoringWeights(
   if (weights.def_clean_sheet !== undefined) insertSetting.run('mvp_weight_def_clean_sheet', String(weights.def_clean_sheet));
   if (weights.yellow_card !== undefined) insertSetting.run('mvp_weight_yellow_card', String(weights.yellow_card));
   if (weights.red_card !== undefined) insertSetting.run('mvp_weight_red_card', String(weights.red_card));
+  if (weights.gk_goal !== undefined) insertSetting.run('mvp_weight_gk_goal', String(weights.gk_goal));
+  if (weights.gk_assist !== undefined) insertSetting.run('mvp_weight_gk_assist', String(weights.gk_assist));
+  if (weights.gk_save !== undefined) insertSetting.run('mvp_weight_gk_save', String(weights.gk_save));
+  if (weights.gk_penalty_save !== undefined) insertSetting.run('mvp_weight_gk_penalty_save', String(weights.gk_penalty_save));
   insertSetting.run('pot_min_appearances', String(minAppearances));
 
   logActivity('UPDATE_WEIGHTS', `Updated tournament award scoring weights (min apps: ${minAppearances})`, adminUsername);

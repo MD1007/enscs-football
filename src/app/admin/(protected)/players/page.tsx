@@ -22,6 +22,7 @@ export default function AdminPlayersPage() {
   const [nameAr, setNameAr] = useState('');
   const [teamId, setTeamId] = useState<number>(0);
   const [isCaptain, setIsCaptain] = useState(false);
+  const [isJoker, setIsJoker] = useState(false);
   const [squadNumber, setSquadNumber] = useState('');
 
   const [saving, setSaving] = useState(false);
@@ -47,6 +48,7 @@ export default function AdminPlayersPage() {
     setNameAr('');
     setTeamId(defaultTeamId || (teams.length > 0 ? teams[0].id : 0));
     setIsCaptain(false);
+    setIsJoker(false);
     setSquadNumber('');
     setModalOpen(true);
     setFeedback(null);
@@ -56,8 +58,10 @@ export default function AdminPlayersPage() {
     setEditingPlayer(p);
     setName(p.name);
     setNameAr(p.name_ar || '');
-    setTeamId(p.team_id);
+    // A joker has no real team: preselect the first one in case he is turned back into a squad player.
+    setTeamId(p.is_joker ? (teams.length > 0 ? teams[0].id : 0) : p.team_id);
     setIsCaptain(Boolean(p.is_captain));
+    setIsJoker(Boolean(p.is_joker));
     setSquadNumber(p.squad_number ? p.squad_number.toString() : '');
     setModalOpen(true);
     setFeedback(null);
@@ -77,7 +81,8 @@ export default function AdminPlayersPage() {
         name,
         name_ar: nameAr || null,
         team_id: teamId,
-        is_captain: isCaptain,
+        is_joker: isJoker,
+        is_captain: isJoker ? false : isCaptain,
         squad_number: squadNumber ? parseInt(squadNumber) : null,
       };
 
@@ -231,6 +236,11 @@ export default function AdminPlayersPage() {
                   <td className="py-3.5 px-4 font-semibold text-white" dir="auto">
                     <div className="flex items-center space-x-2">
                       <span dir="auto">{p.name}</span>
+                      {p.is_joker && (
+                        <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded font-black uppercase">
+                          🃏 Joker
+                        </span>
+                      )}
                       {p.is_goalkeeper && (
                         <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
                           🧤 GK
@@ -327,7 +337,21 @@ export default function AdminPlayersPage() {
                 />
               </div>
 
-              <div>
+              <label className="flex items-start space-x-3 p-3 rounded-xl bg-purple-500/10 border border-purple-500/40 cursor-pointer min-h-[44px]">
+                <input
+                  type="checkbox"
+                  checked={isJoker}
+                  onChange={(e) => setIsJoker(e.target.checked)}
+                  className="w-5 h-5 mt-0.5 rounded accent-purple-400 flex-shrink-0"
+                />
+                <span className="text-xs text-slate-200">
+                  <span className="font-black text-purple-300 block">🃏 Joker (guest player)</span>
+                  Belongs to no team. Add him to a side match by match in the Match Center; his goals, assists and
+                  appearances are still counted.
+                </span>
+              </label>
+
+              <div className={isJoker ? 'hidden' : ''}>
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">
                   Team Assignment
                 </label>
@@ -344,7 +368,7 @@ export default function AdminPlayersPage() {
                 </select>
               </div>
 
-              <div className="flex items-center space-x-3 p-3 rounded-xl bg-pitch-card border border-pitch-border">
+              <div className={`flex items-center space-x-3 p-3 rounded-xl bg-pitch-card border border-pitch-border ${isJoker ? 'hidden' : ''}`}>
                 <input
                   type="checkbox"
                   id="captain_check"

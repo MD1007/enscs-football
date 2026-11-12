@@ -127,6 +127,14 @@ export function initDatabase() {
     'ALTER TABLE matches ADD COLUMN clock_started_at INTEGER',
     'ALTER TABLE matches ADD COLUMN clock_accumulated_ms INTEGER DEFAULT 0',
     'ALTER TABLE matches ADD COLUMN clock_running INTEGER DEFAULT 0',
+    // Per-match goalkeepers (NULL = the team's usual keeper), their saves, and guest players
+    'ALTER TABLE matches ADD COLUMN home_gk_id INTEGER',
+    'ALTER TABLE matches ADD COLUMN away_gk_id INTEGER',
+    'ALTER TABLE matches ADD COLUMN home_saves INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN away_saves INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN home_pen_saves INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN away_pen_saves INTEGER DEFAULT 0',
+    'ALTER TABLE matches ADD COLUMN guests_json TEXT',
   ];
 
   for (const sql of migrations) {
@@ -170,7 +178,109 @@ export function initDatabase() {
 // Idempotent, non-destructive roster corrections. Runs on every start so an
 // existing database (local or production) gets the fix without any reset:
 // the player row keeps its ID, team and every match event linked to it.
+/**
+ * Jokers (guest players with no fixed team) are stored in one hidden squad.
+ * It is recognised by this group letter and never shown as a real team.
+ */
+export const JOKER_GROUP = 'J';
+
+/** Returns the hidden joker squad's id, creating it on first use. */
+export function ensureJokerTeam(): number {
+  const existing = db.prepare('SELECT id FROM teams WHERE group_id = ? ORDER BY id LIMIT 1').get(JOKER_GROUP) as
+    | { id: number }
+    | undefined;
+  if (existing) return existing.id;
+  const res = db
+    .prepare('INSERT INTO teams (name, name_ar, group_id, color) VALUES (?, ?, ?, ?)')
+    .run('Joker', null, JOKER_GROUP, '#A855F7');
+  return Number(res.lastInsertRowid);
+}
+
+/**
+ * One-time move of the organiser who kept goal for FC deddou as a guest:
+ * he becomes a joker, keeps his goal, and is recorded as that match's guest
+ * goalkeeper. The team gets its regular keeper back. Safe to run repeatedly:
+ * it only acts while he is still listed in FC deddou's squad.
+ */
+function convertGuestKeeperToJoker(jokerTeamId: number) {
+  const guest = db
+    .prepare(
+      `SELECT p.id, p.team_id FROM players p JOIN teams t ON t.id = p.team_id
+       WHERE p.name = 'MAHDI DAHMANI' AND t.name = 'FC deddou'`
+    )
+    .get() as { id: number; team_id: number } | undefined;
+  if (!guest) return;
+
+  const teamId = guest.team_id;
+  db.transaction(() => {
+    // Every match where he has an event for that team: record him as guest + goalkeeper.
+    const played = db
+      .prepare(
+        `SELECT DISTINCT m.id, m.home_team_id, m.away_team_id, m.guests_json
+         FROM matches m JOIN match_events e ON e.match_id = m.id
+         WHERE (e.player_id = ? OR e.assister_id = ?) AND e.team_id = ?`
+      )
+      .all(guest.id, guest.id, teamId) as { id: number; home_team_id: number; away_team_id: number; guests_json: string | null }[];
+
+    for (const m of played) {
+      let guests: { player_id: number; team_id: number }[] = [];
+      try {
+        guests = m.guests_json ? JSON.parse(m.guests_json) : [];
+      } catch {
+        guests = [];
+      }
+      if (!guests.some((g) => g.player_id === guest.id)) guests.push({ player_id: guest.id, team_id: teamId });
+      const gkColumn = m.home_team_id === teamId ? 'home_gk_id' : 'away_gk_id';
+      db.prepare(`UPDATE matches SET guests_json = ?, ${gkColumn} = ? WHERE id = ?`).run(JSON.stringify(guests), guest.id, m.id);
+    }
+
+    // Give the team its regular keeper back.
+    const regular = db.prepare(`SELECT id FROM players WHERE name = 'Saadi Moncif' AND team_id = ?`).get(teamId) as
+      | { id: number }
+      | undefined;
+    db.prepare('UPDATE teams SET goalkeeper_id = ? WHERE id = ? AND goalkeeper_id = ?').run(regular?.id ?? null, teamId, guest.id);
+    if (regular) {
+      db.prepare(`UPDATE players SET is_goalkeeper = 1, position = 'Goalkeeper' WHERE id = ?`).run(regular.id);
+    }
+    db.prepare('UPDATE teams SET captain_id = NULL WHERE id = ? AND captain_id = ?').run(teamId, guest.id);
+
+    // Move him to the joker squad (his goal stays attached to FC deddou's match).
+    db.prepare(
+      `UPDATE players SET team_id = ?, is_goalkeeper = 0, is_captain = 0, position = 'Attacker' WHERE id = ?`
+    ).run(jokerTeamId, guest.id);
+
+    db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+      'MAKE_JOKER',
+      'MAHDI DAHMANI moved from FC deddou squad to Joker (guest goalkeeper for 1 match, goal kept)',
+      'system'
+    );
+  })();
+}
+
+/** One-time upgrade of goalkeeper scoring (flag stored with the settings so it survives restores). */
+function upgradeGoalkeeperScoring() {
+  const done = db.prepare(`SELECT value FROM tournament_settings WHERE key = 'gk_scoring_v2'`).get();
+  if (done) return;
+  const set = db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)');
+  db.transaction(() => {
+    set.run('mvp_weight_gk_clean_sheet', '30');
+    set.run('mvp_weight_gk_goal', '15');
+    set.run('mvp_weight_gk_assist', '6');
+    set.run('mvp_weight_gk_save', '1');
+    set.run('mvp_weight_gk_penalty_save', '5');
+    set.run('gk_scoring_v2', 'applied');
+  })();
+}
+
 export function applyRosterCorrections() {
+  try {
+    const jokerTeamId = ensureJokerTeam();
+    upgradeGoalkeeperScoring();
+    convertGuestKeeperToJoker(jokerTeamId);
+  } catch (err) {
+    console.error('Joker / goalkeeper data upgrade failed:', err);
+  }
+
   try {
     db.prepare(
       `UPDATE players
@@ -257,6 +367,10 @@ function seedInitialData() {
   insertWeight.run('mvp_weight_def_clean_sheet', '2');
   insertWeight.run('mvp_weight_yellow_card', '-1');
   insertWeight.run('mvp_weight_red_card', '-3');
+  insertWeight.run('mvp_weight_gk_goal', '15');
+  insertWeight.run('mvp_weight_gk_assist', '6');
+  insertWeight.run('mvp_weight_gk_save', '1');
+  insertWeight.run('mvp_weight_gk_penalty_save', '5');
   insertWeight.run('pot_min_appearances', '3');
 
   // Seed default 7 awards in tournament_awards table
@@ -313,7 +427,7 @@ function seedInitialData() {
   }
 
   // Check if teams exist
-  const teamsCount = db.prepare('SELECT count(*) as count FROM teams').get() as { count: number };
+  const teamsCount = db.prepare(`SELECT count(*) as count FROM teams WHERE group_id != 'J'`).get() as { count: number };
   if (teamsCount.count === 0) {
     seedTeamsAndPlayers();
     seedMatches();
