@@ -6,6 +6,7 @@ import { Match, Player } from '@/lib/types';
 import MatchEventsTimeline from './MatchEventsTimeline';
 import MatchPreview from './MatchPreview';
 import LiveMinute from './LiveMinute';
+import ShootoutDisplay from './ShootoutDisplay';
 import {
   X,
   Shield,
@@ -237,7 +238,12 @@ export default function MatchDetailModal({ match, onClose, context }: MatchDetai
               </div>
             )
           ) : (
-            <MatchEventsTimeline match={match} />
+            <div className="space-y-6">
+              {match.shootout && match.shootout.length > 0 && (
+                <ShootoutDisplay match={match} />
+              )}
+              <MatchEventsTimeline match={match} />
+            </div>
           )}
         </div>
 

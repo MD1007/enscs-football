@@ -8,6 +8,10 @@ import MatchMVPSpotlight from '@/components/MatchMVPSpotlight';
 import MatchPreview from '@/components/MatchPreview';
 import LiveMinute from '@/components/LiveMinute';
 import ShareButton from '@/components/ShareButton';
+import ShootoutDisplay from '@/components/ShootoutDisplay';
+import ResultCardButton from '@/components/ResultCardButton';
+import FanPolls from '@/components/FanPolls';
+import { getPollsState } from '@/lib/polls';
 import {
   Calendar,
   Clock,
@@ -55,6 +59,30 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
 
   const mvpPlayer = data.players.find((p) => p.id === match.mvp_player_id);
 
+  let fanPick: { name: string; percentage: number } | null = null;
+  if (match.status === 'finished') {
+    const pollData = getPollsState(match.id);
+    if (pollData?.motm && !pollData.motm.open && pollData.motm.counts && pollData.motm.total > 0) {
+      let topId = '';
+      let topCount = -1;
+      for (const [id, count] of Object.entries(pollData.motm.counts)) {
+        if (count > topCount) {
+          topCount = count;
+          topId = id;
+        }
+      }
+      if (topId) {
+        const topOpt = pollData.motm.options.find((o) => o.id === topId);
+        if (topOpt) {
+          fanPick = {
+            name: topOpt.label,
+            percentage: Math.round((topCount / pollData.motm.total) * 100),
+          };
+        }
+      }
+    }
+  }
+
   const allMatches = data.matches;
   const currentIndex = allMatches.findIndex((m) => m.id === matchId);
   const prevMatch = currentIndex > 0 ? allMatches[currentIndex - 1] : null;
@@ -92,7 +120,11 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
       ? '3rd Place Match'
       : 'Final';
   const fixture = `${match.home_team_name || 'TBD'} vs ${match.away_team_name || 'TBD'}`;
-  const scoreline = `${match.home_team_name || 'TBD'} ${match.home_score ?? 0}-${match.away_score ?? 0} ${match.away_team_name || 'TBD'}`;
+  const pensText =
+    match.home_penalties !== null && match.away_penalties !== null
+      ? ` (${match.home_penalties}-${match.away_penalties} pens)`
+      : '';
+  const scoreline = `${match.home_team_name || 'TBD'} ${match.home_score ?? 0}-${match.away_score ?? 0} ${match.away_team_name || 'TBD'}${pensText}`;
   const shareTitle = isUpcomingMatch ? fixture : scoreline;
   const shareText =
     match.status === 'finished'
@@ -258,10 +290,21 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
         </div>
       </div>
 
-      {/* Share */}
-      <div className="flex justify-center -mt-2">
-        <ShareButton title={shareTitle} text={shareText} path={`/matches/${match.id}`} label={isUpcomingMatch ? 'Share fixture' : 'Share result'} />
+      {/* Share & Story Card */}
+      <div className="flex flex-wrap items-center justify-center gap-3 -mt-2">
+        <ShareButton
+          title={shareTitle}
+          text={shareText}
+          path={`/matches/${match.id}`}
+          label={isUpcomingMatch ? 'Share fixture' : 'Share result'}
+        />
+        {match.status === 'finished' && (
+          <ResultCardButton match={match} stageTitle={getStageTitle()} />
+        )}
       </div>
+
+      {/* Fan Polls: Who will win? / Fans' MVP */}
+      <FanPolls match={match} />
 
       {/* Pre-match preview: form, head-to-head, star players, stakes */}
       {isUpcomingMatch && (
@@ -281,7 +324,12 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
 
       {/* Official Match MVP Showcase */}
       {(match.mvp_player_name || mvpPlayer) && (
-        <MatchMVPSpotlight match={match} player={mvpPlayer} />
+        <MatchMVPSpotlight match={match} player={mvpPlayer} fanPick={fanPick} />
+      )}
+
+      {/* Penalty Shootout Display (Knockout matches) */}
+      {match.shootout && match.shootout.length > 0 && (
+        <ShootoutDisplay match={match} />
       )}
 
       {/* EA Sports FC Inspired Match Events Timeline */}

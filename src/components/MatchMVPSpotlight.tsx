@@ -7,9 +7,10 @@ import { Crown, Star, Shield, Flame, Award, Sparkles } from 'lucide-react';
 interface MatchMVPSpotlightProps {
   match: Match;
   player?: Player | null;
+  fanPick?: { name: string; percentage: number } | null;
 }
 
-export default function MatchMVPSpotlight({ match, player }: MatchMVPSpotlightProps) {
+export default function MatchMVPSpotlight({ match, player, fanPick }: MatchMVPSpotlightProps) {
   if (!match.mvp_player_name && !player) return null;
 
   const playerName = player ? player.name : match.mvp_player_name;
@@ -43,7 +44,7 @@ export default function MatchMVPSpotlight({ match, player }: MatchMVPSpotlightPr
           </div>
 
           <div className="space-y-1">
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-pitch-darkest bg-amber-400 px-2.5 py-0.5 rounded-full shadow-sm flex items-center space-x-1">
                 <Star className="w-3 h-3 fill-pitch-darkest" />
                 <span>OFFICIAL MATCH MVP</span>
@@ -51,6 +52,11 @@ export default function MatchMVPSpotlight({ match, player }: MatchMVPSpotlightPr
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 {isManual ? '🔒 Admin Override' : '⚡ Performance Ranked'}
               </span>
+              {fanPick && (
+                <span className="text-[10px] font-bold text-purple-300 bg-purple-950/60 border border-purple-500/40 px-2.5 py-0.5 rounded-full flex items-center space-x-1">
+                  <span>Fans&apos; pick: {fanPick.name} ({fanPick.percentage}%)</span>
+                </span>
+              )}
             </div>
 
             <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2" dir="auto">

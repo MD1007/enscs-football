@@ -57,7 +57,12 @@ function AdminMatchesContent() {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   // Modal active tab
-  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'gk' | 'shootout' | 'mvp'>('goals');
+  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'gk' | 'shootout' | 'mvp' | 'polls'>('goals');
+  const [pollStats, setPollStats] = useState<{
+    winner?: { total: number; counts: Record<string, number> | null; open: boolean };
+    motm?: { total: number; counts: Record<string, number> | null; open: boolean; options: any[] };
+  } | null>(null);
+  const [pollActionLoading, setPollActionLoading] = useState(false);
 
   // Form states for match editor
   const [homeScore, setHomeScore] = useState<string>('0');
@@ -306,6 +311,42 @@ function AdminMatchesContent() {
     setModalTab('goals');
     setFeedback(null);
     setLastPublishedAt(null);
+    loadPollStats(match.id);
+  };
+
+  const loadPollStats = async (matchId: number) => {
+    try {
+      const res = await fetch(`/api/polls?match_id=${matchId}`);
+      if (res.ok) {
+        const json = await res.json();
+        setPollStats(json);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleResetPoll = async (poll: 'winner' | 'motm' | 'all') => {
+    if (!editingMatch) return;
+    const pollName = poll === 'all' ? 'all fan votes' : `${poll} poll`;
+    if (!confirm(`Are you sure you want to reset and permanently delete ${pollName} for this match?`)) return;
+    setPollActionLoading(true);
+    try {
+      const res = await fetch(`/api/polls?match_id=${editingMatch.id}&poll=${poll}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setPageNotice(`Reset ${pollName} successfully.`);
+        loadPollStats(editingMatch.id);
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to reset poll');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error resetting poll');
+    } finally {
+      setPollActionLoading(false);
+    }
   };
 
   // ---------------------------------------------------------------- stopwatch
@@ -1319,6 +1360,19 @@ function AdminMatchesContent() {
                 <Crown className="w-3.5 h-3.5 text-amber-400" />
                 <span>⭐ Man of the Match (MVP)</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('polls')}
+                className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition ${
+                  modalTab === 'polls'
+                    ? 'border-purple-400 text-purple-300 bg-purple-400/5'
+                    : 'border-transparent text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>
+                  🗳️ Polls ({pollStats ? (pollStats.winner?.total || 0) + (pollStats.motm?.total || 0) : 0})
+                </span>
+              </button>
             </div>
 
             {/* TAB 1: GOALS & ASSISTS */}
@@ -1775,7 +1829,12 @@ function AdminMatchesContent() {
                         {(
                           [
                             { label: 'Great saves', hint: 'only you see this', value: k.saves, set: k.setSaves },
-                            { label: 'Penalties saved', hint: '', value: k.pens, set: k.setPens },
+                            {
+                              label: 'Penalties saved',
+                              hint: 'Shootout saves are added automatically',
+                              value: k.pens,
+                              set: k.setPens,
+                            },
                           ]
                         ).map((c) => (
                           <div key={c.label} className="flex items-center justify-between gap-2">
@@ -2183,6 +2242,113 @@ function AdminMatchesContent() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: FAN POLLS */}
+            {modalTab === 'polls' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-pitch-card border border-purple-500/30 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                    <div>
+                      <span className="text-xs font-black uppercase text-purple-300">
+                        🗳️ Fan Polls & Voting Control
+                      </span>
+                      <p className="text-[11px] text-slate-400">
+                        Live voting statistics and admin reset tools for this match.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={pollActionLoading || !pollStats || ((pollStats.winner?.total || 0) + (pollStats.motm?.total || 0) === 0)}
+                      onClick={() => handleResetPoll('all')}
+                      className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-bold transition disabled:opacity-40 min-h-[36px] self-start sm:self-auto"
+                    >
+                      Reset all polls
+                    </button>
+                  </div>
+
+                  {/* Winner Poll Card */}
+                  <div className="p-3.5 rounded-xl bg-pitch-darkest/70 border border-white/5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-white">Winner Poll: Who will win?</span>
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${pollStats?.winner?.open ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700/50 text-slate-400'}`}>
+                          {pollStats?.winner?.open ? 'Open' : 'Closed'}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-mono font-bold text-slate-300">
+                          {pollStats?.winner?.total || 0} votes
+                        </span>
+                        <button
+                          type="button"
+                          disabled={pollActionLoading || !pollStats?.winner?.total}
+                          onClick={() => handleResetPoll('winner')}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-[10px] font-bold transition disabled:opacity-40 min-h-[32px]"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+
+                    {pollStats?.winner?.counts && Object.keys(pollStats.winner.counts).length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                        {Object.entries(pollStats.winner.counts).map(([choice, count]) => (
+                          <div key={choice} className="p-2 rounded-lg bg-white/5 flex items-center justify-between">
+                            <span className="text-slate-400 capitalize">{choice}:</span>
+                            <span className="font-mono font-bold text-white">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-500 italic block">No votes recorded yet</span>
+                    )}
+                  </div>
+
+                  {/* MOTM Poll Card */}
+                  <div className="p-3.5 rounded-xl bg-pitch-darkest/70 border border-white/5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-white">Fans&apos; Man of the Match Poll</span>
+                        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${pollStats?.motm?.open ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700/50 text-slate-400'}`}>
+                          {pollStats?.motm?.open ? 'Open' : 'Closed'}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-mono font-bold text-slate-300">
+                          {pollStats?.motm?.total || 0} votes
+                        </span>
+                        <button
+                          type="button"
+                          disabled={pollActionLoading || !pollStats?.motm?.total}
+                          onClick={() => handleResetPoll('motm')}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-[10px] font-bold transition disabled:opacity-40 min-h-[32px]"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+
+                    {pollStats?.motm?.counts && Object.keys(pollStats.motm.counts).length > 0 ? (
+                      <div className="space-y-1.5 pt-1 text-xs max-h-48 overflow-y-auto">
+                        {Object.entries(pollStats.motm.counts)
+                          .sort(([, a], [, b]) => b - a)
+                          .map(([playerId, count]) => {
+                            const opt = pollStats.motm?.options?.find((o: any) => o.id === playerId);
+                            return (
+                              <div key={playerId} className="p-2 rounded-lg bg-white/5 flex items-center justify-between">
+                                <span className="text-slate-200" dir="auto">{opt?.label || `Player #${playerId}`}</span>
+                                <span className="font-mono font-bold text-amber-400">{count} votes</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-500 italic block">No votes recorded yet</span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

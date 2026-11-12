@@ -469,6 +469,7 @@ function seedInitialData() {
   insertWeight.run('mvp_weight_gk_save', '1');
   insertWeight.run('mvp_weight_gk_penalty_save', '5');
   insertWeight.run('pot_min_appearances', '3');
+  insertWeight.run('fan_motm_window_minutes', '60');
 
   // Seed default 7 awards in tournament_awards table
   const insertAward = db.prepare(`
