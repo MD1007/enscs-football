@@ -272,11 +272,87 @@ function upgradeGoalkeeperScoring() {
   })();
 }
 
+/**
+ * Runs a data correction exactly once. The marker is stored with the settings,
+ * so it travels with the cloud snapshot and the correction never repeats (the
+ * admin stays free to change the same data again afterwards).
+ */
+function runOnce(marker: string, correction: () => void) {
+  const key = `datafix_${marker}`;
+  if (db.prepare('SELECT 1 FROM tournament_settings WHERE key = ?').get(key)) return;
+  db.transaction(() => {
+    correction();
+    db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)').run(key, 'done');
+  })();
+}
+
+/**
+ * Zoro's goalkeeper was credited with 2 goals and 2 assists he did not make.
+ * They go to four different teammates (the ones with the fewest goal
+ * contributions), never to the scorer/assister of the same goal. Scores,
+ * minutes and every other event stay exactly as they were.
+ */
+function redistributeZoroKeeperContributions() {
+  const zoro = db.prepare(`SELECT id FROM teams WHERE name = 'Zoro'`).get() as { id: number } | undefined;
+  if (!zoro) return;
+  const idOf = (name: string) =>
+    (db.prepare('SELECT id FROM players WHERE name = ? AND team_id = ?').get(name, zoro.id) as { id: number } | undefined)?.id;
+  const keeper = idOf('حبار كمال');
+  if (!keeper) return;
+
+  const moves: { match: number; minute: number; role: 'player_id' | 'assister_id'; to: string }[] = [
+    { match: 35, minute: 8, role: 'player_id', to: 'طه لبصير' },
+    { match: 35, minute: 32, role: 'player_id', to: 'أنس خضرون' },
+    { match: 35, minute: 36, role: 'assister_id', to: 'فراح محمد الأمين' },
+    { match: 37, minute: 37, role: 'assister_id', to: 'حجار ايوب' },
+  ];
+
+  let changed = 0;
+  for (const mv of moves) {
+    const to = idOf(mv.to);
+    if (!to) continue;
+    const other = mv.role === 'player_id' ? 'assister_id' : 'player_id';
+    changed += db
+      .prepare(
+        `UPDATE match_events SET ${mv.role} = ?
+         WHERE match_id = ? AND minute = ? AND event_type = 'goal' AND team_id = ?
+           AND ${mv.role} = ? AND (${other} IS NULL OR ${other} != ?)`
+      )
+      .run(to, mv.match, mv.minute, zoro.id, keeper, to).changes;
+  }
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'DATA_FIX',
+    `Moved ${changed} goal/assist credit(s) from حبار كمال to Zoro teammates`,
+    'system'
+  );
+}
+
+/** Registers a second joker (guest player with no fixed team). */
+function addJokerTeboub(jokerTeamId: number) {
+  const exists = db.prepare(`SELECT 1 FROM players WHERE upper(name) = 'TEBOUB MEROUAN'`).get();
+  if (exists) return;
+  db.prepare(
+    `INSERT INTO players (name, name_ar, team_id, is_captain, squad_number, position, is_goalkeeper)
+     VALUES ('TEBOUB MEROUAN', NULL, ?, 0, NULL, 'Attacker', 0)`
+  ).run(jokerTeamId);
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'ADD_PLAYER',
+    'Added joker (guest player) "TEBOUB MEROUAN"',
+    'system'
+  );
+}
+
 export function applyRosterCorrections() {
   try {
     const jokerTeamId = ensureJokerTeam();
     upgradeGoalkeeperScoring();
     convertGuestKeeperToJoker(jokerTeamId);
+    // Only on a database that already holds the tournament (not on an empty/fresh one).
+    const hasResults = db.prepare(`SELECT 1 FROM matches WHERE status = 'finished' LIMIT 1`).get();
+    if (hasResults) {
+      runOnce('zoro_keeper_contributions_v1', redistributeZoroKeeperContributions);
+      runOnce('joker_teboub_v1', () => addJokerTeboub(jokerTeamId));
+    }
   } catch (err) {
     console.error('Joker / goalkeeper data upgrade failed:', err);
   }

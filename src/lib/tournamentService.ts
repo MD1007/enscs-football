@@ -144,6 +144,8 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
   const settingsRaw = db.prepare('SELECT * FROM tournament_settings').all() as { key: string; value: string }[];
   const settings: Record<string, string> = {};
   for (const s of settingsRaw) {
+    // Internal one-time-correction markers are not tournament settings.
+    if (s.key.startsWith('datafix_')) continue;
     settings[s.key] = s.value;
   }
 
