@@ -1,6 +1,7 @@
 import db, { initDatabase, logActivity, JOKER_GROUP } from './db';
 import {
   getMatchGuests,
+  getShootout,
   getMatchGoalkeeperId,
   calculateGroupStandings,
   calculateBestSecondPlace,
@@ -113,10 +114,14 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     if (p.is_joker) jokerIds.add(p.id);
   }
 
-  const matches: Match[] = matchesRaw.map(({ guests_json, ...m }) => {
+  const matches: Match[] = matchesRaw.map(({ guests_json, shootout_json, ...m }) => {
     const match: Match = {
       ...m,
       is_time_set: Boolean(m.is_time_set),
+      shootout: getShootout({ shootout_json } as any).map((k) => ({
+        ...k,
+        player_name: k.player_id ? playerNameById[k.player_id] || null : null,
+      })),
       guests: getMatchGuests({ guests_json } as any)
         .filter((g) => playerNameById[g.player_id])
         .map((g) => ({ ...g, player_name: playerNameById[g.player_id] })),
@@ -556,6 +561,7 @@ export function updateMatchResult(
     home_pen_saves?: number;
     away_pen_saves?: number;
     guests?: { player_id: number; team_id: number }[];
+    shootout?: { team_id: number; player_id?: number | null; result: string }[];
     events: Array<{
       player_id: number;
       team_id: number;
@@ -616,6 +622,28 @@ export function updateMatchResult(
   const homePenSaves = count(data.home_pen_saves, match.home_pen_saves);
   const awayPenSaves = count(data.away_pen_saves, match.away_pen_saves);
 
+  // Shootout kicks: only for the two sides, with a known outcome, at most 60 kicks.
+  const shootout =
+    data.shootout !== undefined
+      ? data.shootout
+          .filter(
+            (k) =>
+              k &&
+              (Number(k.team_id) === match.home_team_id || Number(k.team_id) === match.away_team_id) &&
+              ['scored', 'missed', 'saved'].includes(k.result)
+          )
+          .slice(0, 60)
+          .map((k) => ({
+            team_id: Number(k.team_id),
+            player_id: k.player_id ? Number(k.player_id) : null,
+            result: k.result as 'scored' | 'missed' | 'saved',
+          }))
+      : getShootout(match);
+
+  // Remember when the match was finished: the fans' MVP vote opens from that moment.
+  const finishedAt =
+    data.status === 'finished' ? (match.status === 'finished' && match.finished_at ? match.finished_at : Date.now()) : null;
+
   const transaction = db.transaction(() => {
     let finalMvpPlayerId = data.mvp_player_id !== undefined ? data.mvp_player_id : match.mvp_player_id;
     let finalMvpScore = data.mvp_score !== undefined ? data.mvp_score : match.mvp_score;
@@ -638,6 +666,7 @@ export function updateMatchResult(
         home_pen_saves: homePenSaves,
         away_pen_saves: awayPenSaves,
         guests,
+        shootout,
       };
 
       // Both squads plus this match's guests
@@ -695,7 +724,9 @@ export function updateMatchResult(
           away_saves = ?,
           home_pen_saves = ?,
           away_pen_saves = ?,
-          guests_json = ?
+          guests_json = ?,
+          shootout_json = ?,
+          finished_at = ?
       WHERE id = ?
     `).run(
       data.home_score,
@@ -722,6 +753,8 @@ export function updateMatchResult(
       homePenSaves,
       awayPenSaves,
       guests.length > 0 ? JSON.stringify(guests) : null,
+      shootout.length > 0 ? JSON.stringify(shootout) : null,
+      finishedAt,
       matchId
     );
 
@@ -763,6 +796,69 @@ export function updateMatchResult(
   });
 
   transaction();
+}
+
+/**
+ * Re-runs the automatic Man of the Match formula on every finished match whose
+ * MVP is in automatic mode (manual picks are never touched). With apply = false
+ * it only reports what would change.
+ */
+export function recalculateAutoMvps(apply: boolean, adminUsername: string) {
+  const data = getFullTournamentData({ isAdmin: true });
+  const changes: {
+    match_id: number;
+    fixture: string;
+    from: string | null;
+    to: string | null;
+    from_score: number | null;
+    to_score: number;
+  }[] = [];
+  let checked = 0;
+  let manual = 0;
+
+  const update = db.prepare('UPDATE matches SET mvp_player_id = ?, mvp_score = ? WHERE id = ?');
+  const run = db.transaction(() => {
+    for (const m of data.matches) {
+      if (m.status !== 'finished') continue;
+      if (m.mvp_mode === 'manual') {
+        manual++;
+        continue;
+      }
+      checked++;
+      // Use the exact keeper of each side (the match's own, else the team's usual one).
+      const withKeepers: Match = {
+        ...m,
+        home_gk_id: getMatchGoalkeeperId(m, 'home', data.players, data.teams),
+        away_gk_id: getMatchGoalkeeperId(m, 'away', data.players, data.teams),
+      };
+      const result = calculateMatchMVP(withKeepers, data.players, m.events || []);
+      const newId = result.mvpPlayerId;
+      const newScore = result.mvpScore;
+      if (newId !== (m.mvp_player_id || null) || newScore !== (m.mvp_score ?? null)) {
+        if (newId !== (m.mvp_player_id || null)) {
+          changes.push({
+            match_id: m.id,
+            fixture: `${m.home_team_name} ${m.home_score}-${m.away_score} ${m.away_team_name}`,
+            from: m.mvp_player_name || null,
+            to: data.players.find((p) => p.id === newId)?.name || null,
+            from_score: m.mvp_score ?? null,
+            to_score: newScore,
+          });
+        }
+        if (apply) update.run(newId, newScore || null, m.id);
+      }
+    }
+  });
+  run();
+
+  if (apply) {
+    logActivity(
+      'RECALCULATE_MVP',
+      `Recalculated automatic Man of the Match for ${checked} match(es): ${changes.length} changed`,
+      adminUsername
+    );
+  }
+  return { checked, manual_skipped: manual, changes, applied: apply };
 }
 
 /**

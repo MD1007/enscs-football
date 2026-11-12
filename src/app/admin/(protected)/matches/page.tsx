@@ -57,7 +57,7 @@ function AdminMatchesContent() {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
 
   // Modal active tab
-  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'gk' | 'mvp'>('goals');
+  const [modalTab, setModalTab] = useState<'goals' | 'cards' | 'gk' | 'shootout' | 'mvp'>('goals');
 
   // Form states for match editor
   const [homeScore, setHomeScore] = useState<string>('0');
@@ -92,6 +92,17 @@ function AdminMatchesContent() {
   const [guests, setGuests] = useState<{ player_id: number; team_id: number }[]>([]);
   const [guestPlayerId, setGuestPlayerId] = useState<string>('');
   const [guestTeamId, setGuestTeamId] = useState<number>(0);
+
+  // Penalty shootout (knockout matches), kick by kick
+  const [shootout, setShootout] = useState<
+    { team_id: number; player_id: number | null; result: 'scored' | 'missed' | 'saved' }[]
+  >([]);
+  const [kickTeamId, setKickTeamId] = useState<number>(0);
+  const [kickPlayerId, setKickPlayerId] = useState<string>('');
+
+  // Recalculate Man of the Match
+  const [recalcBusy, setRecalcBusy] = useState(false);
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
 
   // Events list
   const [events, setEvents] = useState<
@@ -252,6 +263,11 @@ function AdminMatchesContent() {
     setGuests((match.guests || []).map((g) => ({ player_id: g.player_id, team_id: g.team_id })));
     setGuestPlayerId('');
     setGuestTeamId(match.home_team_id);
+    setShootout(
+      (match.shootout || []).map((k) => ({ team_id: k.team_id, player_id: k.player_id || null, result: k.result }))
+    );
+    setKickTeamId(match.home_team_id);
+    setKickPlayerId('');
 
     // Existing events
     const existingEvents = (match.events || []).map((e) => ({
@@ -395,6 +411,70 @@ function AdminMatchesContent() {
     awayPenSaves,
     guests,
   ]);
+
+  // RECALCULATE AUTOMATIC MVPs (preview, confirm, apply)
+  const handleRecalculateMvps = async () => {
+    setRecalcBusy(true);
+    setPageNotice(null);
+    try {
+      const call = async (apply: boolean) => {
+        const res = await fetch('/api/admin/matches', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'recalculate_mvp', apply }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Request failed');
+        return d as {
+          checked: number;
+          manual_skipped: number;
+          changes: { fixture: string; from: string | null; to: string | null }[];
+        };
+      };
+
+      const preview = await call(false);
+      if (preview.changes.length > 0) {
+        const lines = preview.changes.map((c) => `• ${c.fixture}: ${c.from || 'nobody'} → ${c.to || 'nobody'}`).join('\n');
+        const ok = confirm(
+          `${preview.changes.length} Man of the Match award(s) will change:\n\n${lines}\n\n` +
+            `${preview.manual_skipped} manual pick(s) stay as they are.\n\nApply these changes?`
+        );
+        if (!ok) {
+          setPageNotice('Nothing was changed.');
+          return;
+        }
+      }
+      await call(true);
+      setPageNotice(
+        preview.changes.length > 0
+          ? `Updated ${preview.changes.length} Man of the Match award(s) across ${preview.checked} automatic matches.`
+          : `Checked ${preview.checked} match(es): every automatic Man of the Match is already correct.`
+      );
+      fetchTournamentData();
+    } catch (err: any) {
+      setPageNotice(`Could not recalculate: ${err.message || 'unknown error'}`);
+    } finally {
+      setRecalcBusy(false);
+    }
+  };
+
+  // PENALTY SHOOTOUT (knockout matches): kick by kick, keeps the shootout score in sync
+  const applyShootout = (kicks: typeof shootout) => {
+    if (!editingMatch) return;
+    setShootout(kicks);
+    const scored = (teamId: number) => kicks.filter((k) => k.team_id === teamId && k.result === 'scored').length;
+    setHomePenalties(kicks.length ? String(scored(editingMatch.home_team_id)) : '');
+    setAwayPenalties(kicks.length ? String(scored(editingMatch.away_team_id)) : '');
+    requestAutoSave();
+  };
+
+  const handleAddKick = (result: 'scored' | 'missed' | 'saved') => {
+    if (!editingMatch || !kickTeamId) return;
+    applyShootout([...shootout, { team_id: kickTeamId, player_id: kickPlayerId ? Number(kickPlayerId) : null, result }]);
+    // Teams alternate: move to the other side for the next kick
+    setKickTeamId(kickTeamId === editingMatch.home_team_id ? editingMatch.away_team_id : editingMatch.home_team_id);
+    setKickPlayerId('');
+  };
 
   // GUEST (JOKER) HANDLERS
   const handleAddGuest = () => {
@@ -585,6 +665,7 @@ function AdminMatchesContent() {
         home_pen_saves: homePenSaves,
         away_pen_saves: awayPenSaves,
         guests,
+        shootout,
         events: events.map((e) => ({
           player_id: e.player_id,
           team_id: e.team_id,
@@ -705,6 +786,22 @@ function AdminMatchesContent() {
         <p className="text-sm text-slate-400">
           Manage match results, register goals with assists, disciplinary cards, official match statistics, and configure Automatic or Manual MVP.
         </p>
+        <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2">
+          <button
+            type="button"
+            disabled={recalcBusy}
+            onClick={handleRecalculateMvps}
+            className="min-h-[44px] px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-2 disabled:opacity-50 self-start"
+          >
+            <Crown className="w-4 h-4" />
+            <span>{recalcBusy ? 'Checking...' : 'Recalculate Man of the Match'}</span>
+          </button>
+          {pageNotice && (
+            <span role="status" className="text-xs text-slate-300" dir="auto">
+              {pageNotice}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -1197,6 +1294,19 @@ function AdminMatchesContent() {
                   {guests.length > 0 ? ` · ${guests.length}🃏` : ''})
                 </span>
               </button>
+              {editingMatch.stage !== 'group' && (
+                <button
+                  type="button"
+                  onClick={() => setModalTab('shootout')}
+                  className={`py-2 px-3 text-xs font-bold uppercase tracking-wider border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition ${
+                    modalTab === 'shootout'
+                      ? 'border-red-400 text-red-300 bg-red-400/5'
+                      : 'border-transparent text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span>🎯 Shootout ({shootout.length})</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setModalTab('mvp')}
@@ -1786,6 +1896,139 @@ function AdminMatchesContent() {
                       </div>
                     )
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: PENALTY SHOOTOUT (knockout matches only) */}
+            {modalTab === 'shootout' && editingMatch.stage !== 'group' && (
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-pitch-card border border-red-500/30 space-y-3">
+                  <div>
+                    <span className="text-xs font-black uppercase text-red-300">🎯 Penalty shootout, kick by kick</span>
+                    <p className="text-[11px] text-slate-400">
+                      Tap the outcome of each kick. The shootout score updates itself, and a saved kick counts as a
+                      penalty save for the other team&apos;s keeper.
+                    </p>
+                  </div>
+
+                  {/* Live shootout score */}
+                  <div className="space-y-2">
+                    {[
+                      { id: editingMatch.home_team_id, name: editingMatch.home_team_name },
+                      { id: editingMatch.away_team_id, name: editingMatch.away_team_name },
+                    ].map((t) => {
+                      const kicks = shootout.filter((k) => k.team_id === t.id);
+                      return (
+                        <div key={t.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-pitch-darkest border border-white/5">
+                          <span className="font-bold text-xs text-white truncate min-w-0" dir="auto">
+                            {t.name}
+                          </span>
+                          <span className="flex items-center gap-1 flex-wrap justify-end">
+                            {kicks.map((k, i) => (
+                              <span
+                                key={i}
+                                title={k.result}
+                                className={`w-5 h-5 rounded-full border text-[10px] flex items-center justify-center font-black ${
+                                  k.result === 'scored'
+                                    ? 'bg-emerald-500 border-emerald-300 text-pitch-darkest'
+                                    : 'bg-red-500/80 border-red-300 text-white'
+                                }`}
+                              >
+                                {k.result === 'scored' ? '✓' : k.result === 'saved' ? '🧤' : '✕'}
+                              </span>
+                            ))}
+                            <span className="ml-2 font-mono font-black text-xl text-white tabular-nums">
+                              {kicks.filter((k) => k.result === 'scored').length}
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Next kick */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: editingMatch.home_team_id, name: editingMatch.home_team_name },
+                      { id: editingMatch.away_team_id, name: editingMatch.away_team_name },
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setKickTeamId(t.id);
+                          setKickPlayerId('');
+                        }}
+                        dir="auto"
+                        className={`min-h-[44px] px-2 rounded-xl text-xs font-black truncate border transition ${
+                          kickTeamId === t.id
+                            ? 'bg-red-500/20 text-red-200 border-red-500/50'
+                            : 'bg-pitch-darkest text-slate-400 border-white/5 hover:text-white'
+                        }`}
+                      >
+                        {t.name} kicks
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={kickPlayerId}
+                    onChange={(e) => setKickPlayerId(e.target.value)}
+                    aria-label="Penalty taker"
+                    className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-base sm:text-xs text-white font-semibold min-h-[44px]"
+                  >
+                    <option value="">-- Taker (optional) --</option>
+                    {sidePlayers(kickTeamId).map((p) => (
+                      <option dir="auto" key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAddKick('scored')}
+                      className="min-h-[56px] rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-pitch-darkest font-black text-xs uppercase tracking-wider transition"
+                    >
+                      ⚽ Scored
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAddKick('saved')}
+                      className="min-h-[56px] rounded-xl bg-blue-500/30 hover:bg-blue-500/45 active:scale-95 border border-blue-400/50 text-blue-100 font-black text-xs uppercase tracking-wider transition"
+                    >
+                      🧤 Saved
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAddKick('missed')}
+                      className="min-h-[56px] rounded-xl bg-red-500/25 hover:bg-red-500/40 active:scale-95 border border-red-400/50 text-red-100 font-black text-xs uppercase tracking-wider transition"
+                    >
+                      ✕ Missed
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                    <button
+                      type="button"
+                      disabled={shootout.length === 0}
+                      onClick={() => applyShootout(shootout.slice(0, -1))}
+                      className="min-h-[44px] px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 disabled:opacity-40"
+                    >
+                      <Undo2 className="w-4 h-4" />
+                      <span>Undo last kick</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={shootout.length === 0}
+                      onClick={() => {
+                        if (confirm('Remove every kick of this shootout?')) applyShootout([]);
+                      }}
+                      className="min-h-[44px] px-3 rounded-xl text-slate-400 hover:text-red-300 text-[11px] font-bold transition disabled:opacity-40"
+                    >
+                      Clear shootout
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

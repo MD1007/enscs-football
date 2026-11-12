@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminFromRequest } from '@/lib/auth';
-import { updateMatchResult, updateMatchSchedule } from '@/lib/tournamentService';
+import { updateMatchResult, updateMatchSchedule, recalculateAutoMvps } from '@/lib/tournamentService';
 import db, { logActivity } from '@/lib/db';
 
 export async function PUT(request: Request) {
@@ -35,6 +35,12 @@ export async function PUT(request: Request) {
       scheduled_time,
       venue,
     } = body;
+
+    // Re-run the automatic Man of the Match formula on all finished matches
+    // (preview first, then apply). Manual picks are left alone.
+    if (action === 'recalculate_mvp') {
+      return NextResponse.json({ success: true, ...recalculateAutoMvps(Boolean(body.apply), admin.username) });
+    }
 
     if (!match_id) {
       return NextResponse.json({ error: 'Match ID is required' }, { status: 400 });
@@ -101,6 +107,7 @@ export async function PUT(request: Request) {
         home_pen_saves: body.home_pen_saves !== undefined ? Number(body.home_pen_saves) || 0 : undefined,
         away_pen_saves: body.away_pen_saves !== undefined ? Number(body.away_pen_saves) || 0 : undefined,
         guests: Array.isArray(body.guests) ? body.guests : undefined,
+        shootout: Array.isArray(body.shootout) ? body.shootout : undefined,
         events: events || [],
       },
       admin.username

@@ -68,6 +68,13 @@ export interface Team {
   created_at?: string;
 }
 
+export interface ShootoutKick {
+  team_id: number;
+  player_id?: number | null;
+  player_name?: string | null;
+  result: 'scored' | 'missed' | 'saved';
+}
+
 export interface MatchGuest {
   player_id: number;
   team_id: number;
@@ -143,6 +150,10 @@ export interface Match {
   away_pen_saves?: number | null;
   /** Jokers / guests who played this match, and for which side. */
   guests?: MatchGuest[];
+  /** Penalty shootout, kick by kick in the order taken. */
+  shootout?: ShootoutKick[];
+  /** Epoch ms when the match was marked finished (opens the fans' MVP vote). */
+  finished_at?: number | null;
   events?: MatchEvent[];
 }
 

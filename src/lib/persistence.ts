@@ -25,6 +25,7 @@ const SNAPSHOT_TABLES = [
   'tournament_rules',
   'tournament_awards',
   'activity_logs',
+  'fan_votes',
 ] as const;
 type SnapshotTable = (typeof SNAPSHOT_TABLES)[number];
 type Tables = Record<SnapshotTable, Record<string, unknown>[]>;

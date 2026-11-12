@@ -1,4 +1,4 @@
-import { Team, Player, Match, GroupId, StandingRow, MatchEvent, MatchGuest, TeamOfTournamentData, TeamOfTournamentPlayer } from './types';
+import { Team, Player, Match, GroupId, StandingRow, MatchEvent, MatchGuest, ShootoutKick, TeamOfTournamentData, TeamOfTournamentPlayer } from './types';
 
 /**
  * Calculates standings for a group according to official tournament rules:
@@ -205,6 +205,32 @@ export function getMatchGuests(m: Match): MatchGuest[] {
   }
 }
 
+/** Penalty shootout kicks recorded on a match, in the order taken. */
+export function getShootout(m: Match): ShootoutKick[] {
+  if (Array.isArray(m.shootout)) return m.shootout;
+  const raw = (m as unknown as { shootout_json?: string | null }).shootout_json;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((k) => k && Number(k.team_id) > 0 && ['scored', 'missed', 'saved'].includes(k.result))
+      .map((k) => ({
+        team_id: Number(k.team_id),
+        player_id: k.player_id ? Number(k.player_id) : null,
+        result: k.result as ShootoutKick['result'],
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Shootout kicks saved by the keeper of `side` (i.e. taken by the other team). */
+export function shootoutSavesFor(m: Match, side: 'home' | 'away'): number {
+  const opponent = side === 'home' ? m.away_team_id : m.home_team_id;
+  return getShootout(m).filter((k) => k.team_id === opponent && k.result === 'saved').length;
+}
+
 /**
  * Goalkeeper of one side in one match: the keeper chosen for that match,
  * otherwise the team's usual keeper.
@@ -324,8 +350,9 @@ export function aggregatePlayerStats(
         gk.penalty_saves = (gk.penalty_saves || 0) + penSaves;
         if (conceded === 0) gk.clean_sheets = (gk.clean_sheets || 0) + 1;
       };
-      creditKeeper(homeGKId, awayScore, Number(m.home_saves) || 0, Number(m.home_pen_saves) || 0);
-      creditKeeper(awayGKId, homeScore, Number(m.away_saves) || 0, Number(m.away_pen_saves) || 0);
+      // Penalty saves = the ones counted by hand + kicks saved in the shootout tracker.
+      creditKeeper(homeGKId, awayScore, Number(m.home_saves) || 0, (Number(m.home_pen_saves) || 0) + shootoutSavesFor(m, 'home'));
+      creditKeeper(awayGKId, homeScore, Number(m.away_saves) || 0, (Number(m.away_pen_saves) || 0) + shootoutSavesFor(m, 'away'));
 
       // Defenders share clean sheets (the keeper is credited above).
       const creditDefenders = (teamId: number, conceded: number, gkId: number | null) => {
@@ -759,7 +786,9 @@ export function calculateMatchMVP(
     // Saves and penalty saves belong to the keeper of that side
     if (keeper) {
       const saves = Number(isHomeSide ? match.home_saves : match.away_saves) || 0;
-      const penSaves = Number(isHomeSide ? match.home_pen_saves : match.away_pen_saves) || 0;
+      const penSaves =
+        (Number(isHomeSide ? match.home_pen_saves : match.away_pen_saves) || 0) +
+        shootoutSavesFor(match, isHomeSide ? 'home' : 'away');
       scoresMap[p.id].score += saves * weights.gkSave + penSaves * weights.gkPenaltySave;
       scoresMap[p.id].breakdown.saves = saves;
       scoresMap[p.id].breakdown.penaltySaves = penSaves;

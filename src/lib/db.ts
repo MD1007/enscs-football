@@ -135,6 +135,9 @@ export function initDatabase() {
     'ALTER TABLE matches ADD COLUMN home_pen_saves INTEGER DEFAULT 0',
     'ALTER TABLE matches ADD COLUMN away_pen_saves INTEGER DEFAULT 0',
     'ALTER TABLE matches ADD COLUMN guests_json TEXT',
+    // Kick-by-kick penalty shootout and the moment the match was finished (opens the fan vote)
+    'ALTER TABLE matches ADD COLUMN shootout_json TEXT',
+    'ALTER TABLE matches ADD COLUMN finished_at INTEGER',
   ];
 
   for (const sql of migrations) {
@@ -161,6 +164,24 @@ export function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (winner_player_id) REFERENCES players (id) ON DELETE SET NULL
     );
+  `);
+
+  // Fan polls: one row per vote. A device is recognised by a cookie id and by a
+  // fingerprint hash; either one already present for a poll blocks a second vote.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fan_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      match_id INTEGER NOT NULL,
+      poll TEXT NOT NULL,            -- 'winner' or 'motm'
+      choice TEXT NOT NULL,          -- 'home' | 'draw' | 'away', or a player id
+      voter_cid TEXT NOT NULL,
+      voter_fp TEXT NOT NULL,
+      ip_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS fan_votes_cid ON fan_votes (match_id, poll, voter_cid);
+    CREATE UNIQUE INDEX IF NOT EXISTS fan_votes_fp ON fan_votes (match_id, poll, voter_fp);
+    CREATE INDEX IF NOT EXISTS fan_votes_ip ON fan_votes (match_id, poll, ip_hash);
   `);
 
   // Small key/value store for internal bookkeeping (e.g. last snapshot time).
