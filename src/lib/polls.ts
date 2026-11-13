@@ -5,7 +5,10 @@ import { getMatchGuests } from './calculations';
 import { recordHit } from './rateLimit';
 
 function resolvePollSecret(): string {
-  const configured = process.env.POLL_SECRET || process.env.JWT_SECRET || '';
+  // JWT_SECRET is deliberately not used here: the value configured on the host was once
+  // published in this repository, and vote hashes are stored in the public data snapshot.
+  // With a known secret, visitor IP addresses could be recovered from those hashes.
+  const configured = process.env.POLL_SECRET || '';
   if (configured) return configured;
   const privateMaterial = [process.env.ADMIN_PASSWORD, process.env.GITHUB_BACKUP_TOKEN].filter(Boolean).join('|');
   if (privateMaterial) {

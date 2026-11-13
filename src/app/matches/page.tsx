@@ -82,6 +82,51 @@ export default function MatchesPage() {
     return true;
   });
 
+  // Fixtures as a calendar: live first, then each match day in order, then
+  // matches without a date, then results (newest first).
+  const dayKey = (m: Match) => (m.scheduled_time || '').slice(0, 10);
+  const time = (m: Match) => new Date(m.scheduled_time).getTime() || 0;
+  const sections: { key: string; title: string; hint?: string; tone: string; matches: Match[] }[] = [];
+  const live = filteredMatches.filter((m) => m.status === 'live').sort((a, b) => time(a) - time(b));
+  if (live.length) sections.push({ key: 'live', title: 'Live now', tone: 'text-red-300', matches: live });
+
+  const scheduled = filteredMatches
+    .filter((m) => (m.status === 'upcoming' || m.status === 'postponed') && m.is_time_set)
+    .sort((a, b) => time(a) - time(b) || a.id - b.id);
+  const todayKey = new Date().toLocaleDateString('en-CA');
+  for (const m of scheduled) {
+    const key = dayKey(m);
+    let section = sections.find((s) => s.key === key);
+    if (!section) {
+      const [y, mo, d] = key.split('-').map(Number);
+      const title = new Date(y, (mo || 1) - 1, d || 1).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      });
+      section = {
+        key,
+        title,
+        hint: key === todayKey ? 'Today' : key < todayKey ? 'Result pending' : undefined,
+        tone: 'text-emerald-300',
+        matches: [],
+      };
+      sections.push(section);
+    }
+    section.matches.push(m);
+  }
+
+  const unscheduled = filteredMatches.filter(
+    (m) => (m.status === 'upcoming' || m.status === 'postponed') && !m.is_time_set
+  );
+  if (unscheduled.length)
+    sections.push({ key: 'tba', title: 'Date to be announced', tone: 'text-amber-300', matches: unscheduled });
+
+  const others = filteredMatches
+    .filter((m) => m.status === 'finished' || m.status === 'cancelled')
+    .sort((a, b) => time(b) - time(a) || b.id - a.id);
+  if (others.length) sections.push({ key: 'results', title: 'Results', tone: 'text-slate-300', matches: others });
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 space-y-8">
       {/* Header */}
@@ -203,9 +248,32 @@ export default function MatchesPage() {
           <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or search keywords.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredMatches.map((match) => (
-            <MatchCard key={match.id} match={match} allMatches={matches} allPlayers={players} />
+        <div className="space-y-8">
+          {sections.map((section) => (
+            <section key={section.key} aria-label={section.title} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <h2 className={`text-sm sm:text-base font-black uppercase tracking-wider ${section.tone}`}>
+                  {section.key === 'live' && (
+                    <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-ping mr-2 align-middle" />
+                  )}
+                  {section.title}
+                </h2>
+                {section.hint && (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    {section.hint}
+                  </span>
+                )}
+                <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {section.matches.length} match{section.matches.length === 1 ? '' : 'es'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {section.matches.map((match) => (
+                  <MatchCard key={match.id} match={match} allMatches={matches} allPlayers={players} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

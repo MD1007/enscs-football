@@ -363,6 +363,79 @@ function addJokerTeboub(jokerTeamId: number) {
   );
 }
 
+/**
+ * Official schedule announced by the organisers for Sunday 15 to Wednesday 18
+ * November 2026. Each fixture is found by its two teams, must still be
+ * "upcoming" with no events, and gets its date and kick-off time. Where the
+ * announcement lists the teams the other way round, home and away are swapped
+ * (and any "who will win" votes are flipped with them so they keep their meaning).
+ */
+function applyScheduleNov15to18() {
+  const fixtures: [string, string, string][] = [
+    ['OSPF', 'ELITE WOLVES', '2026-11-15T18:30:00'],
+    ['Laghbina FC', 'Spider-Feet', '2026-11-15T19:45:00'],
+    ['Zoro', 'FC deddou', '2026-11-16T18:30:00'],
+    ['فريق الرجال', 'FC Rono', '2026-11-16T19:45:00'],
+    ['Rats Team', 'Barca', '2026-11-17T18:30:00'],
+    ['PVC', 'Nscs', '2026-11-17T19:45:00'],
+    ['ELITE WOLVES', 'Laghbina FC', '2026-11-18T18:30:00'],
+    ['OSPF', 'Spider-Feet', '2026-11-18T19:45:00'],
+  ];
+  const teamId = (name: string) =>
+    (db.prepare('SELECT id FROM teams WHERE name = ?').get(name) as { id: number } | undefined)?.id;
+
+  const done: string[] = [];
+  for (const [homeName, awayName, when] of fixtures) {
+    const home = teamId(homeName);
+    const away = teamId(awayName);
+    if (!home || !away) continue;
+
+    const found = db
+      .prepare(
+        `SELECT m.id, m.home_team_id FROM matches m
+         WHERE m.stage = 'group' AND m.status = 'upcoming'
+           AND ((m.home_team_id = ? AND m.away_team_id = ?) OR (m.home_team_id = ? AND m.away_team_id = ?))
+           AND NOT EXISTS (SELECT 1 FROM match_events e WHERE e.match_id = m.id)`
+      )
+      .all(home, away, away, home) as { id: number; home_team_id: number }[];
+    if (found.length !== 1) continue; // already played, missing or ambiguous: leave it alone
+    const match = found[0];
+
+    if (match.home_team_id !== home) {
+      db.prepare(
+        `UPDATE matches
+         SET home_team_id = away_team_id, away_team_id = home_team_id,
+             home_gk_id = away_gk_id, away_gk_id = home_gk_id
+         WHERE id = ?`
+      ).run(match.id);
+      db.prepare(
+        `UPDATE fan_votes
+         SET choice = CASE choice WHEN 'home' THEN 'away' WHEN 'away' THEN 'home' ELSE choice END
+         WHERE match_id = ? AND poll = 'winner'`
+      ).run(match.id);
+    }
+    db.prepare('UPDATE matches SET scheduled_time = ?, is_time_set = 1 WHERE id = ?').run(when, match.id);
+    done.push(`${homeName} vs ${awayName} ${when.replace('T', ' ').slice(0, 16)}`);
+  }
+
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'SCHEDULE_MATCH',
+    `Official schedule applied to ${done.length}/8 fixtures: ${done.join('; ')}`,
+    'system'
+  );
+}
+
+/** Forfeit rule as announced: fixed kick-off times, no-show = forfeit, score to be confirmed. */
+function updateForfeitRule() {
+  db.prepare(
+    `UPDATE tournament_rules
+     SET content = replace(content,
+       'Any team arriving more than 10 minutes past scheduled kickoff loses by forfeit (3-0).',
+       'Kick-off times are fixed. A team that does not show up loses the match by forfeit; the forfeit score (5-0 or 10-0) will be confirmed by the organisers.')
+     WHERE id = 'roster_rules'`
+  ).run();
+}
+
 export function applyRosterCorrections() {
   try {
     const jokerTeamId = ensureJokerTeam();
@@ -373,6 +446,8 @@ export function applyRosterCorrections() {
     if (hasResults) {
       runOnce('zoro_keeper_contributions_v1', redistributeZoroKeeperContributions);
       runOnce('joker_teboub_v1', () => addJokerTeboub(jokerTeamId));
+      runOnce('schedule_nov15_18_v1', applyScheduleNov15to18);
+      runOnce('forfeit_rule_v1', updateForfeitRule);
     }
   } catch (err) {
     console.error('Joker / goalkeeper data upgrade failed:', err);
