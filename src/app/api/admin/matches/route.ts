@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminFromRequest } from '@/lib/auth';
-import { updateMatchResult, updateMatchSchedule, recalculateAutoMvps } from '@/lib/tournamentService';
+import { updateMatchResult, updateMatchSchedule, recalculateAutoMvps, recordForfeit } from '@/lib/tournamentService';
 import db, { logActivity } from '@/lib/db';
 
 export async function PUT(request: Request) {
@@ -54,13 +54,24 @@ export async function PUT(request: Request) {
       }
       const running = Boolean(body.running);
       const elapsed = Math.max(0, Math.min(Number(body.elapsed_ms) || 0, 6 * 60 * 60 * 1000));
+      // Which part of the match: first half, half time or second half.
+      const period = ['first', 'half_time', 'second'].includes(body.period) ? String(body.period) : null;
       const now = Date.now();
       db.prepare(
-        'UPDATE matches SET clock_running = ?, clock_started_at = ?, clock_accumulated_ms = ? WHERE id = ?'
-      ).run(running ? 1 : 0, running ? now : null, Math.round(elapsed), Number(match_id));
+        'UPDATE matches SET clock_running = ?, clock_started_at = ?, clock_accumulated_ms = ?, clock_period = ? WHERE id = ?'
+      ).run(running ? 1 : 0, running ? now : null, Math.round(elapsed), period, Number(match_id));
       // Not an audit-log event, but it must still reach the cloud backup.
       (globalThis as unknown as { __enscsBackupSoon?: () => void }).__enscsBackupSoon?.();
       return NextResponse.json({ success: true, server_time: now });
+    }
+
+    // Award the match by forfeit: one team did not show up.
+    if (action === 'forfeit') {
+      const result = recordForfeit(Number(match_id), Number(body.forfeit_team_id), Number(body.goals), admin.username);
+      if (!result.success) {
+        return NextResponse.json({ error: result.error }, { status: 400 });
+      }
+      return NextResponse.json(result);
     }
 
     // Schedule-only action

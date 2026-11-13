@@ -640,6 +640,16 @@ export function updateMatchResult(
           }))
       : getShootout(match);
 
+  // A forfeit stays a forfeit only while the awarded result is left exactly as it was;
+  // entering a real score, events or another status turns it back into a normal match.
+  const keepForfeit = Boolean(
+    match.forfeit_team_id &&
+      data.status === 'finished' &&
+      data.home_score === match.home_score &&
+      data.away_score === match.away_score &&
+      (data.events || []).length === 0
+  );
+
   // Remember when the match was finished: the fans' MVP vote opens from that moment.
   const finishedAt =
     data.status === 'finished' ? (match.status === 'finished' && match.finished_at ? match.finished_at : Date.now()) : null;
@@ -726,7 +736,8 @@ export function updateMatchResult(
           away_pen_saves = ?,
           guests_json = ?,
           shootout_json = ?,
-          finished_at = ?
+          finished_at = ?,
+          forfeit_team_id = ?
       WHERE id = ?
     `).run(
       data.home_score,
@@ -755,6 +766,7 @@ export function updateMatchResult(
       guests.length > 0 ? JSON.stringify(guests) : null,
       shootout.length > 0 ? JSON.stringify(shootout) : null,
       finishedAt,
+      keepForfeit ? match.forfeit_team_id : null,
       matchId
     );
 
@@ -796,6 +808,66 @@ export function updateMatchResult(
   });
 
   transaction();
+}
+
+/**
+ * Awards a match by forfeit: the team that did not show up loses 0-N (N = 5 or 10).
+ * The match is finished with no goals, cards or Man of the Match, and it does
+ * not count as an appearance or a clean sheet for anyone. Standings do count it.
+ */
+export function recordForfeit(matchId: number, forfeitTeamId: number, goals: number, adminUsername: string) {
+  const match = db
+    .prepare(
+      `SELECT m.*, ht.name as home_name, at.name as away_name
+       FROM matches m
+       LEFT JOIN teams ht ON m.home_team_id = ht.id
+       LEFT JOIN teams at ON m.away_team_id = at.id
+       WHERE m.id = ?`
+    )
+    .get(matchId) as any;
+
+  if (!match) return { success: false as const, error: 'Match not found' };
+  if (!match.home_team_id || !match.away_team_id) {
+    return { success: false as const, error: 'Both teams must be known before a forfeit can be recorded' };
+  }
+  if (forfeitTeamId !== match.home_team_id && forfeitTeamId !== match.away_team_id) {
+    return { success: false as const, error: 'Choose which of the two teams did not show up' };
+  }
+  if (goals !== 5 && goals !== 10) {
+    return { success: false as const, error: 'The forfeit score must be 5-0 or 10-0' };
+  }
+
+  const homeForfeits = forfeitTeamId === match.home_team_id;
+  const homeScore = homeForfeits ? 0 : goals;
+  const awayScore = homeForfeits ? goals : 0;
+  const winnerId = homeForfeits ? match.away_team_id : match.home_team_id;
+  const loserName = homeForfeits ? match.home_name : match.away_name;
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM match_events WHERE match_id = ?').run(matchId);
+    db.prepare(
+      `UPDATE matches SET
+         home_score = ?, away_score = ?, home_penalties = NULL, away_penalties = NULL,
+         status = 'finished', winner_team_id = ?,
+         mvp_player_id = NULL, mvp_mode = 'manual', mvp_score = NULL,
+         forfeit_team_id = ?, finished_at = ?,
+         clock_running = 0, clock_started_at = NULL, clock_accumulated_ms = 0, clock_period = NULL,
+         home_gk_id = NULL, away_gk_id = NULL,
+         home_saves = 0, away_saves = 0, home_pen_saves = 0, away_pen_saves = 0,
+         guests_json = NULL, shootout_json = NULL
+       WHERE id = ?`
+    ).run(homeScore, awayScore, winnerId, forfeitTeamId, Date.now(), matchId);
+
+    if (match.stage === 'semi_final') checkAndAdvanceKnockout();
+
+    logActivity(
+      'FORFEIT',
+      `${match.home_name} vs ${match.away_name}: ${loserName} did not show up, awarded ${homeScore} - ${awayScore}`,
+      adminUsername
+    );
+  })();
+
+  return { success: true as const, home_score: homeScore, away_score: awayScore, forfeit_team_id: forfeitTeamId };
 }
 
 /**

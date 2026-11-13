@@ -138,6 +138,9 @@ export function initDatabase() {
     // Kick-by-kick penalty shootout and the moment the match was finished (opens the fan vote)
     'ALTER TABLE matches ADD COLUMN shootout_json TEXT',
     'ALTER TABLE matches ADD COLUMN finished_at INTEGER',
+    // Clock period (first half / half time / second half) and matches awarded by forfeit
+    'ALTER TABLE matches ADD COLUMN clock_period TEXT',
+    'ALTER TABLE matches ADD COLUMN forfeit_team_id INTEGER',
   ];
 
   for (const sql of migrations) {
@@ -465,6 +468,10 @@ export function applyRosterCorrections() {
   }
 }
 
+// One-way bcrypt hash of the admin password (used when ADMIN_PASSWORD is not set on the server).
+const DEFAULT_ADMIN_USERNAME = 'MAHDIDHMN';
+const DEFAULT_ADMIN_PASSWORD_HASH = '$2b$12$0iw/5WUdfYMIhHnS9IdutOLl9JYcNu35kv9VPjg6QN/kAwGi0.qF6';
+
 /** True when the admin password comes from a private server setting. */
 export function isAdminPasswordPrivate(): boolean {
   return Boolean(process.env.ADMIN_PASSWORD);
@@ -494,6 +501,21 @@ function ensureAdminUser() {
         db.prepare('DELETE FROM admin_users').run();
         db.prepare('INSERT INTO admin_users (id, username, password_hash) VALUES (1, ?, ?)').run(username, hash);
       })();
+    }
+    return;
+  }
+
+  // No private setting: use the password chosen by the organiser. Only its
+  // one-way hash is stored here, never the password itself. Setting
+  // ADMIN_PASSWORD on the server always takes priority over this.
+  if (DEFAULT_ADMIN_PASSWORD_HASH) {
+    if (!existing) {
+      db.prepare('INSERT INTO admin_users (id, username, password_hash) VALUES (1, ?, ?)').run(
+        DEFAULT_ADMIN_USERNAME,
+        DEFAULT_ADMIN_PASSWORD_HASH
+      );
+    } else if (existing.password_hash !== DEFAULT_ADMIN_PASSWORD_HASH) {
+      db.prepare('UPDATE admin_users SET password_hash = ? WHERE id = ?').run(DEFAULT_ADMIN_PASSWORD_HASH, existing.id);
     }
     return;
   }

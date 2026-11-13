@@ -140,6 +140,10 @@ export interface Match {
   clock_started_at?: number | null;
   clock_accumulated_ms?: number | null;
   clock_running?: number | boolean | null;
+  /** 'first' | 'half_time' | 'second' (null for clocks without halves) */
+  clock_period?: string | null;
+  /** Team that did not show up, when the match was awarded by forfeit. */
+  forfeit_team_id?: number | null;
   // Goalkeeper who actually played each side (null = the team's usual keeper)
   home_gk_id?: number | null;
   away_gk_id?: number | null;

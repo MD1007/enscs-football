@@ -101,6 +101,11 @@ export default function MatchCard({ match, allMatches, allPlayers }: MatchCardPr
                 Finished
               </span>
             )}
+            {match.status === 'finished' && match.forfeit_team_id && (
+              <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/40 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Forfeit
+              </span>
+            )}
             {match.status === 'upcoming' && (
               <div className="flex items-center space-x-1 text-[11px] text-slate-400 font-medium">
                 <Clock className="w-3 h-3 text-slate-500" />

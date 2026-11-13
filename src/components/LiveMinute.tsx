@@ -2,16 +2,19 @@
 
 import React, { useEffect, useState } from 'react';
 import { Match } from '@/lib/types';
-import { elapsedMs, minuteOf, serverNowEstimate, syncServerTime } from '@/lib/liveClock';
+import { isClockPeriod, readClock, serverNowEstimate, syncServerTime } from '@/lib/liveClock';
 
 interface LiveMinuteProps {
-  match: Pick<Match, 'status' | 'clock_started_at' | 'clock_accumulated_ms' | 'clock_running'>;
+  match: Pick<Match, 'status' | 'clock_started_at' | 'clock_accumulated_ms' | 'clock_running' | 'clock_period'>;
   /** Server time when the page was rendered (server components pass Date.now()). */
   serverNow?: number;
   className?: string;
 }
 
-/** Ticking match minute for a live match, e.g. "23'". Renders nothing when no clock was started. */
+/**
+ * Ticking match time for a live match: "23'", "30+2'", "HT", "47'", "60+4'".
+ * Renders nothing when no clock was started.
+ */
 export default function LiveMinute({ match, serverNow, className }: LiveMinuteProps) {
   const [now, setNow] = useState<number | null>(null);
 
@@ -26,12 +29,31 @@ export default function LiveMinute({ match, serverNow, className }: LiveMinutePr
   const accumulated = match.clock_accumulated_ms || 0;
   if (match.status !== 'live' || now === null || (!running && accumulated <= 0)) return null;
 
-  const ms = elapsedMs({ running, startedAt: match.clock_started_at ?? null, accumulatedMs: accumulated }, now);
-  const minute = Math.min(minuteOf(ms), 199);
+  const reading = readClock(
+    {
+      running,
+      startedAt: match.clock_started_at ?? null,
+      accumulatedMs: accumulated,
+      period: isClockPeriod(match.clock_period) ? match.clock_period : null,
+    },
+    now
+  );
+
+  const isHalfTime = reading.phase === 'half_time';
+  const text = isHalfTime ? 'HT' : running ? reading.label : `⏸ ${reading.label}`;
+  const title = isHalfTime
+    ? 'Half time'
+    : reading.phase === 'first'
+    ? 'First half'
+    : reading.phase === 'second'
+    ? 'Second half'
+    : running
+    ? 'Match clock'
+    : 'Clock paused';
 
   return (
-    <span className={className} title={running ? 'Match clock' : 'Clock paused'}>
-      {running ? `${minute}'` : `⏸ ${minute}'`}
+    <span className={className} title={title} aria-label={`${title}: ${text}`}>
+      {text}
     </span>
   );
 }

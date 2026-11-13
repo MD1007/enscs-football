@@ -317,7 +317,8 @@ export function aggregatePlayerStats(
       }
     }
 
-    if (m.status === 'finished') {
+    // A forfeit was never played: no appearances, clean sheets or goals conceded for anyone.
+    if (m.status === 'finished' && !m.forfeit_team_id) {
       const homeScore = m.home_score ?? 0;
       const awayScore = m.away_score ?? 0;
 

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Match, Team, Player, MatchEvent } from '@/lib/types';
 import { calculateMatchMVP } from '@/lib/calculations';
 import { useMatchClock } from '@/lib/useMatchClock';
-import { ClockState, formatClock, serverNowEstimate, syncServerTime } from '@/lib/liveClock';
+import { ClockPeriod, ClockState, formatClock, isClockPeriod, serverNowEstimate, syncServerTime } from '@/lib/liveClock';
 import {
   Play,
   Pause,
@@ -104,6 +104,12 @@ function AdminMatchesContent() {
   >([]);
   const [kickTeamId, setKickTeamId] = useState<number>(0);
   const [kickPlayerId, setKickPlayerId] = useState<string>('');
+
+  // Forfeit (a team did not show up)
+  const [forfeitOpen, setForfeitOpen] = useState(false);
+  const [forfeitTeamId, setForfeitTeamId] = useState<number>(0);
+  const [forfeitGoals, setForfeitGoals] = useState<5 | 10>(5);
+  const [forfeitedTeamId, setForfeitedTeamId] = useState<number | null>(null);
 
   // Recalculate Man of the Match
   const [recalcBusy, setRecalcBusy] = useState(false);
@@ -273,6 +279,10 @@ function AdminMatchesContent() {
     );
     setKickTeamId(match.home_team_id);
     setKickPlayerId('');
+    setForfeitOpen(false);
+    setForfeitTeamId(0);
+    setForfeitGoals(5);
+    setForfeitedTeamId(match.forfeit_team_id || null);
 
     // Existing events
     const existingEvents = (match.events || []).map((e) => ({
@@ -362,13 +372,20 @@ function AdminMatchesContent() {
       running && editingMatch.clock_started_at
         ? Date.now() - Math.max(0, serverNowEstimate() - editingMatch.clock_started_at)
         : null;
-    return { running: running && startedAt !== null, startedAt, accumulatedMs };
+    return {
+      running: running && startedAt !== null,
+      startedAt,
+      accumulatedMs,
+      period: isClockPeriod(editingMatch.clock_period) ? editingMatch.clock_period : null,
+    };
   }, [editingMatch]);
 
   const matchClock = useMatchClock(editingMatch ? editingMatch.id : null, serverClockFallback);
 
-  // Minute shown in the event forms: typed value, else the running match minute.
+  // Minute shown in the event forms: typed value, else the running match minute
+  // (stoppage time stays on 30 or 60 and is noted on the event as "30+2'").
   const autoMinute = matchClock.hasStarted ? String(Math.min(matchClock.minute, 130)) : '';
+  const stoppageNote = matchClock.hasStarted && matchClock.reading.stoppage > 0 ? matchClock.reading.label : null;
   const goalMinuteValue = goalMinuteEdited ? goalMinute : autoMinute;
   const cardMinuteValue = cardMinuteEdited ? cardMinute : autoMinute;
 
@@ -377,11 +394,11 @@ function AdminMatchesContent() {
   };
 
   // Tells the server about the clock so the public site shows the live minute.
-  const pushClock = (matchId: number, running: boolean, elapsed: number) => {
+  const pushClock = (matchId: number, running: boolean, elapsed: number, period: ClockPeriod | null = null) => {
     fetch('/api/admin/matches', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'clock', match_id: matchId, running, elapsed_ms: Math.round(elapsed) }),
+      body: JSON.stringify({ action: 'clock', match_id: matchId, running, elapsed_ms: Math.round(elapsed), period }),
     }).catch((err) => console.error('Clock sync failed:', err));
   };
 
@@ -557,6 +574,8 @@ function AdminMatchesContent() {
       sub_type: goalType,
       assister_id: goalAssisterId ? Number(goalAssisterId) : null,
       minute: goalMinuteValue ? parseInt(goalMinuteValue) : null,
+      // Stoppage-time goals are stamped 30' / 60' and shown as "30+2'"
+      detail: !goalMinuteEdited && stoppageNote ? stoppageNote : null,
       player_name: scorer?.name || 'Player',
       team_name: team?.name || 'Team',
       assister_name: assister?.name || undefined,
@@ -658,6 +677,7 @@ function AdminMatchesContent() {
       sub_type: null,
       assister_id: null,
       minute: cardMinuteValue ? parseInt(cardMinuteValue) : null,
+      detail: !cardMinuteEdited && stoppageNote ? stoppageNote : null,
       player_name: player?.name || 'Player',
       team_name: team?.name || 'Team',
     };
@@ -764,7 +784,7 @@ function AdminMatchesContent() {
   const handleStartMatch = () => {
     if (!editingMatch) return;
     matchClock.start();
-    pushClock(editingMatch.id, true, 0);
+    pushClock(editingMatch.id, true, 0, 'first');
     setStatus('live');
     void handleSaveResult({
       statusOverride: 'live',
@@ -775,13 +795,86 @@ function AdminMatchesContent() {
   const handlePauseClock = () => {
     if (!editingMatch) return;
     const next = matchClock.pause();
-    pushClock(editingMatch.id, false, next.accumulatedMs);
+    pushClock(editingMatch.id, false, next.accumulatedMs, next.period || null);
   };
 
   const handleResumeClock = () => {
     if (!editingMatch) return;
     const next = matchClock.resume();
-    pushClock(editingMatch.id, true, next.accumulatedMs);
+    pushClock(editingMatch.id, true, next.accumulatedMs, next.period || null);
+  };
+
+  // HALF TIME: the clock goes back to 30:00 and waits for the second half.
+  const handleHalfTime = () => {
+    if (!editingMatch) return;
+    const next = matchClock.halfTime();
+    pushClock(editingMatch.id, false, next.accumulatedMs, 'half_time');
+    setFeedback({ type: 'success', message: 'Half time. The clock is waiting on 30:00; press "Start 2nd Half" at the restart.' });
+  };
+
+  // SECOND HALF: runs from 30:00 (31' to 60', then 60+1', 60+2'...).
+  const handleStartSecondHalf = () => {
+    if (!editingMatch) return;
+    const next = matchClock.startSecondHalf();
+    pushClock(editingMatch.id, true, next.accumulatedMs, 'second');
+    if (status !== 'live') {
+      setStatus('live');
+      void handleSaveResult({ statusOverride: 'live', silent: true });
+    }
+    setFeedback({ type: 'success', message: 'Second half under way.' });
+  };
+
+  // FORFEIT: one team did not show up. Awards the agreed score with no goals, cards or MVP.
+  const handleForfeit = async () => {
+    if (!editingMatch || !forfeitTeamId) return;
+    const loser = forfeitTeamId === editingMatch.home_team_id ? editingMatch.home_team_name : editingMatch.away_team_name;
+    const winner = forfeitTeamId === editingMatch.home_team_id ? editingMatch.away_team_name : editingMatch.home_team_name;
+    const hadEvents = events.length > 0;
+    const ok = confirm(
+      `Record a forfeit?\n\n${loser} did not show up.\n${winner} wins ${forfeitGoals}-0.\n\n` +
+        (hadEvents ? `The ${events.length} goal/card event(s) entered for this match will be removed.\n\n` : '') +
+        'No goals, cards, appearances or Man of the Match are counted for a forfeit.'
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/admin/matches', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'forfeit', match_id: editingMatch.id, forfeit_team_id: forfeitTeamId, goals: forfeitGoals }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Could not record the forfeit');
+
+      // Mirror the saved result in the open editor
+      matchClock.reset();
+      setHomeScore(String(d.home_score));
+      setAwayScore(String(d.away_score));
+      setHomePenalties('');
+      setAwayPenalties('');
+      setStatus('finished');
+      setEvents([]);
+      setGuests([]);
+      setShootout([]);
+      setHomeGkId(null);
+      setAwayGkId(null);
+      setHomeSaves(0);
+      setAwaySaves(0);
+      setHomePenSaves(0);
+      setAwayPenSaves(0);
+      setMvpMode('manual');
+      setMvpPlayerId(null);
+      setForfeitOpen(false);
+      setForfeitedTeamId(forfeitTeamId);
+      setFeedback({ type: 'success', message: `Forfeit recorded: ${winner} ${forfeitGoals}-0 ${loser}. Standings updated.` });
+      fetchTournamentData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Could not record the forfeit' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleResetClock = () => {
@@ -1018,8 +1111,8 @@ function AdminMatchesContent() {
                   }`}
                   aria-label="Match clock"
                 >
-                  {matchClock.running ? '● ' : '⏸ '}
-                  {formatClock(matchClock.elapsed)}
+                  {matchClock.period === 'half_time' ? '' : matchClock.running ? '● ' : '⏸ '}
+                  {matchClock.period ? matchClock.reading.label : formatClock(matchClock.elapsed)}
                 </span>
               )}
               <button
@@ -1159,6 +1252,93 @@ function AdminMatchesContent() {
               </div>
             </div>
 
+            {/* FORFEIT (a team did not show up) */}
+            {forfeitedTeamId && status === 'finished' && (
+              <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-xs text-amber-200" dir="auto">
+                🏳 <span className="font-black">Awarded by forfeit.</span>{' '}
+                {forfeitedTeamId === editingMatch.home_team_id ? editingMatch.home_team_name : editingMatch.away_team_name} did
+                not show up. No goals, appearances or Man of the Match are counted. Entering a real result turns it back
+                into a normal match.
+              </div>
+            )}
+            {editingMatch.home_team_id && editingMatch.away_team_id && !matchClock.hasStarted && (
+              <div className="rounded-2xl border border-amber-500/30 bg-pitch-card">
+                <button
+                  type="button"
+                  onClick={() => setForfeitOpen((v) => !v)}
+                  aria-expanded={forfeitOpen}
+                  className="w-full min-h-[48px] px-4 flex items-center justify-between text-xs font-black uppercase tracking-wider text-amber-300"
+                >
+                  <span>🏳 A team did not show up (forfeit)</span>
+                  <span className="text-slate-400">{forfeitOpen ? 'Hide' : 'Open'}</span>
+                </button>
+                {forfeitOpen && (
+                  <div className="p-4 pt-0 space-y-3">
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-1">1. Who did not show up?</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: editingMatch.home_team_id, name: editingMatch.home_team_name },
+                          { id: editingMatch.away_team_id, name: editingMatch.away_team_name },
+                        ].map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            dir="auto"
+                            onClick={() => setForfeitTeamId(t.id)}
+                            aria-pressed={forfeitTeamId === t.id}
+                            className={`min-h-[48px] px-2 rounded-xl text-xs font-black truncate border transition ${
+                              forfeitTeamId === t.id
+                                ? 'bg-amber-500/25 text-amber-100 border-amber-400/60'
+                                : 'bg-pitch-darkest text-slate-300 border-white/10 hover:text-white'
+                            }`}
+                          >
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-1">2. Forfeit score</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([5, 10] as const).map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setForfeitGoals(g)}
+                            aria-pressed={forfeitGoals === g}
+                            className={`min-h-[48px] rounded-xl font-mono font-black text-lg border transition ${
+                              forfeitGoals === g
+                                ? 'bg-amber-500/25 text-amber-100 border-amber-400/60'
+                                : 'bg-pitch-darkest text-slate-300 border-white/10 hover:text-white'
+                            }`}
+                          >
+                            {g} - 0
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!forfeitTeamId || saving}
+                      onClick={handleForfeit}
+                      className="w-full min-h-[52px] rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-pitch-darkest font-black text-xs uppercase tracking-wider transition"
+                    >
+                      {forfeitTeamId
+                        ? `Record forfeit: ${
+                            forfeitTeamId === editingMatch.home_team_id ? editingMatch.away_team_name : editingMatch.home_team_name
+                          } wins ${forfeitGoals}-0`
+                        : 'Choose the team that did not show up'}
+                    </button>
+                    <p className="text-[11px] text-slate-400">
+                      The match is published as finished. It counts in the standings, but nobody gets goals, an
+                      appearance, a clean sheet or Man of the Match.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* PITCH-SIDE STOPWATCH */}
             <div
               className={`p-4 rounded-2xl border space-y-3 ${
@@ -1185,7 +1365,19 @@ function AdminMatchesContent() {
                       : 'bg-slate-700 text-slate-300 border-slate-600'
                   }`}
                 >
-                  {matchClock.running ? 'Live' : matchClock.hasStarted ? 'Paused' : status === 'finished' ? 'Full time' : 'Not started'}
+                  {matchClock.period === 'half_time'
+                    ? 'Half time'
+                    : matchClock.running
+                    ? matchClock.period === 'first'
+                      ? '1st half'
+                      : matchClock.period === 'second'
+                      ? '2nd half'
+                      : 'Live'
+                    : matchClock.hasStarted
+                    ? 'Paused'
+                    : status === 'finished'
+                    ? 'Full time'
+                    : 'Not started'}
                 </span>
               </div>
 
@@ -1202,7 +1394,17 @@ function AdminMatchesContent() {
                   <div className="text-[11px] text-slate-400 mt-1.5">
                     {matchClock.hasStarted ? (
                       <>
-                        New events are stamped <span className="font-mono font-bold text-emerald-400">{autoMinute}&apos;</span>
+                        Fans see{' '}
+                        <span className="font-mono font-black text-white">{matchClock.reading.label}</span>
+                        {matchClock.period === 'half_time' ? (
+                          ' · waiting for the second half'
+                        ) : (
+                          <>
+                            {' '}
+                            · new events are stamped{' '}
+                            <span className="font-mono font-bold text-emerald-400">{stoppageNote || `${autoMinute}'`}</span>
+                          </>
+                        )}
                       </>
                     ) : (
                       'Start the clock at kick-off: minutes fill in by themselves.'
@@ -1221,6 +1423,26 @@ function AdminMatchesContent() {
                       <Play className="w-5 h-5 fill-current" />
                       <span>{status === 'finished' ? 'Restart Match (Live)' : 'Start Match'}</span>
                     </button>
+                  ) : matchClock.period === 'half_time' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleStartSecondHalf}
+                        className="col-span-2 min-h-[56px] rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.99] text-pitch-darkest font-black text-sm uppercase tracking-wider shadow-glow transition flex items-center justify-center space-x-2"
+                      >
+                        <Play className="w-5 h-5 fill-current" />
+                        <span>Start 2nd Half</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={handleFullTime}
+                        className="col-span-2 min-h-[52px] rounded-xl bg-red-500/20 hover:bg-red-500/30 active:scale-[0.98] border border-red-500/50 text-red-200 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                      >
+                        <Square className="w-4 h-4 fill-current" />
+                        <span>Full Time</span>
+                      </button>
+                    </>
                   ) : (
                     <>
                       {matchClock.running ? (
@@ -1232,7 +1454,7 @@ function AdminMatchesContent() {
                           <Pause className="w-4 h-4 fill-current" />
                           <span>Pause</span>
                         </button>
-                      ) : (
+                        ) : (
                         <button
                           type="button"
                           onClick={handleResumeClock}
@@ -1241,16 +1463,38 @@ function AdminMatchesContent() {
                           <Play className="w-4 h-4 fill-current" />
                           <span>Resume</span>
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={handleFullTime}
-                        className="min-h-[52px] rounded-xl bg-red-500/20 hover:bg-red-500/30 active:scale-[0.98] border border-red-500/50 text-red-200 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
-                      >
-                        <Square className="w-4 h-4 fill-current" />
-                        <span>Full Time</span>
-                      </button>
+                        )}
+                      {matchClock.period === 'first' ? (
+                        <button
+                          type="button"
+                          onClick={handleHalfTime}
+                          className="min-h-[52px] rounded-xl bg-blue-500/25 hover:bg-blue-500/40 active:scale-[0.98] border border-blue-400/50 text-blue-100 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5"
+                        >
+                          <Pause className="w-4 h-4" />
+                          <span>Half Time</span>
+                        </button>
+                        ) : (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={handleFullTime}
+                          className="min-h-[52px] rounded-xl bg-red-500/20 hover:bg-red-500/30 active:scale-[0.98] border border-red-500/50 text-red-200 font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                        >
+                          <Square className="w-4 h-4 fill-current" />
+                          <span>Full Time</span>
+                        </button>
+                        )}
+                      {matchClock.period === 'first' && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={handleFullTime}
+                          className="col-span-2 min-h-[44px] rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-bold text-[11px] uppercase tracking-wider transition flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                        >
+                          <Square className="w-3.5 h-3.5 fill-current" />
+                          <span>End match now (Full Time)</span>
+                        </button>
+                        )}
                     </>
                   )}
                 </div>

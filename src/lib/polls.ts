@@ -164,7 +164,10 @@ export function getPollsState(
   const windowMs = windowMinutes * 60 * 1000;
   const finishedAt = match.finished_at ? Number(match.finished_at) : null;
   const motmClosesAt = finishedAt ? finishedAt + windowMs : null;
-  const motmOpen = Boolean(match.status === 'finished' && motmClosesAt && Date.now() < motmClosesAt);
+  // No fans' Man of the Match for a match that was not played (forfeit).
+  const motmOpen = Boolean(
+    match.status === 'finished' && !match.forfeit_team_id && motmClosesAt && Date.now() < motmClosesAt
+  );
 
   // Eligible MOTM players: both squads plus guests for this match
   const guestRecords = getMatchGuests(match as any);
