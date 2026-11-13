@@ -373,17 +373,24 @@ function addJokerTeboub(jokerTeamId: number) {
  * announcement lists the teams the other way round, home and away are swapped
  * (and any "who will win" votes are flipped with them so they keep their meaning).
  */
-function applyScheduleNov15to18() {
-  const fixtures: [string, string, string][] = [
-    ['OSPF', 'ELITE WOLVES', '2026-11-15T18:30:00'],
-    ['Laghbina FC', 'Spider-Feet', '2026-11-15T19:45:00'],
-    ['Zoro', 'FC deddou', '2026-11-16T18:30:00'],
-    ['فريق الرجال', 'FC Rono', '2026-11-16T19:45:00'],
-    ['Rats Team', 'Barca', '2026-11-17T18:30:00'],
-    ['PVC', 'Nscs', '2026-11-17T19:45:00'],
-    ['ELITE WOLVES', 'Laghbina FC', '2026-11-18T18:30:00'],
-    ['OSPF', 'Spider-Feet', '2026-11-18T19:45:00'],
-  ];
+const SCHEDULE_NOV_15_TO_18: [string, string, string][] = [
+  ['OSPF', 'ELITE WOLVES', '2026-11-15T18:30:00'],
+  ['Laghbina FC', 'Spider-Feet', '2026-11-15T19:45:00'],
+  ['Zoro', 'FC deddou', '2026-11-16T18:30:00'],
+  ['فريق الرجال', 'FC Rono', '2026-11-16T19:45:00'],
+  ['Rats Team', 'Barca', '2026-11-17T18:30:00'],
+  ['PVC', 'Nscs', '2026-11-17T19:45:00'],
+  ['ELITE WOLVES', 'Laghbina FC', '2026-11-18T18:30:00'],
+  ['OSPF', 'Spider-Feet', '2026-11-18T19:45:00'],
+];
+
+// Announced afterwards for Saturday 14 November 2026.
+const SCHEDULE_NOV_14: [string, string, string][] = [
+  ['Rats Team', 'Nscs', '2026-11-14T17:45:00'],
+  ['PVC', 'Barca', '2026-11-14T19:00:00'],
+];
+
+function applyFixtureSchedule(fixtures: [string, string, string][]) {
   const teamId = (name: string) =>
     (db.prepare('SELECT id FROM teams WHERE name = ?').get(name) as { id: number } | undefined)?.id;
 
@@ -423,7 +430,7 @@ function applyScheduleNov15to18() {
 
   db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
     'SCHEDULE_MATCH',
-    `Official schedule applied to ${done.length}/8 fixtures: ${done.join('; ')}`,
+    `Official schedule applied to ${done.length}/${fixtures.length} fixtures: ${done.join('; ')}`,
     'system'
   );
 }
@@ -449,7 +456,8 @@ export function applyRosterCorrections() {
     if (hasResults) {
       runOnce('zoro_keeper_contributions_v1', redistributeZoroKeeperContributions);
       runOnce('joker_teboub_v1', () => addJokerTeboub(jokerTeamId));
-      runOnce('schedule_nov15_18_v1', applyScheduleNov15to18);
+      runOnce('schedule_nov15_18_v1', () => applyFixtureSchedule(SCHEDULE_NOV_15_TO_18));
+      runOnce('schedule_nov14_v1', () => applyFixtureSchedule(SCHEDULE_NOV_14));
       runOnce('forfeit_rule_v1', updateForfeitRule);
     }
   } catch (err) {
