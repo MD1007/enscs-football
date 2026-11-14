@@ -435,6 +435,66 @@ function applyFixtureSchedule(fixtures: [string, string, string][]) {
   );
 }
 
+/**
+ * TAKI (joker) kept goal for PVC against Barca on 14 Nov and scored the last
+ * goal of the match: 29-6 becomes 30-6. Only applied while the match still has
+ * the 29-6 score, so it can never add the goal twice or touch a corrected result.
+ */
+function addTakiGoalPvcBarca(jokerTeamId: number) {
+  const pvc = (db.prepare(`SELECT id FROM teams WHERE name = 'PVC'`).get() as { id: number } | undefined)?.id;
+  const barca = (db.prepare(`SELECT id FROM teams WHERE name = 'Barca'`).get() as { id: number } | undefined)?.id;
+  if (!pvc || !barca) return;
+  const match = db
+    .prepare(
+      `SELECT id, home_score, away_score, guests_json FROM matches
+       WHERE stage = 'group' AND status = 'finished' AND home_team_id = ? AND away_team_id = ?`
+    )
+    .get(pvc, barca) as { id: number; home_score: number; away_score: number; guests_json: string | null } | undefined;
+  if (!match || match.home_score !== 29 || match.away_score !== 6) {
+    db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+      'DATA_FIX',
+      'TAKI goal not added: PVC vs Barca is no longer 29-6',
+      'system'
+    );
+    return;
+  }
+
+  let takiId = (db.prepare(`SELECT id FROM players WHERE upper(name) = 'TAKI'`).get() as { id: number } | undefined)?.id;
+  if (!takiId) {
+    takiId = Number(
+      db
+        .prepare(
+          `INSERT INTO players (name, name_ar, team_id, is_captain, squad_number, position, is_goalkeeper)
+           VALUES ('TAKI', NULL, ?, 0, NULL, 'Attacker', 0)`
+        )
+        .run(jokerTeamId).lastInsertRowid
+    );
+  }
+
+  let guests: { player_id: number; team_id: number }[] = [];
+  try {
+    guests = match.guests_json ? JSON.parse(match.guests_json) : [];
+  } catch {
+    guests = [];
+  }
+  if (!guests.some((g) => g.player_id === takiId)) guests.push({ player_id: takiId, team_id: pvc });
+
+  db.prepare(
+    `INSERT INTO match_events (match_id, team_id, player_id, event_type, sub_type, minute, detail, assister_id)
+     VALUES (?, ?, ?, 'goal', 'normal', 60, '60+3''', NULL)`
+  ).run(match.id, pvc, takiId);
+  db.prepare('UPDATE matches SET home_score = 30, home_gk_id = ?, guests_json = ? WHERE id = ?').run(
+    takiId,
+    JSON.stringify(guests),
+    match.id
+  );
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'DATA_FIX',
+    "Added joker TAKI (PVC goalkeeper) and his 60+3' goal: PVC 30 - 6 Barca",
+    'system'
+  );
+}
+
 /** Forfeit rule as announced: fixed kick-off times, no-show = forfeit, score to be confirmed. */
 function updateForfeitRule() {
   db.prepare(
@@ -458,6 +518,7 @@ export function applyRosterCorrections() {
       runOnce('joker_teboub_v1', () => addJokerTeboub(jokerTeamId));
       runOnce('schedule_nov15_18_v1', () => applyFixtureSchedule(SCHEDULE_NOV_15_TO_18));
       runOnce('schedule_nov14_v1', () => applyFixtureSchedule(SCHEDULE_NOV_14));
+      runOnce('joker_taki_pvc_barca_v1', () => addTakiGoalPvcBarca(jokerTeamId));
       runOnce('forfeit_rule_v1', updateForfeitRule);
     }
   } catch (err) {
