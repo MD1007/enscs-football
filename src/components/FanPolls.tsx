@@ -254,31 +254,32 @@ export default function FanPolls({ match, className = '', onFansPickLoaded }: Fa
       remainingText = `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
     }
 
-    // Top 3 players by vote
-    const top3 = useMemo(() => {
-      if (!motmPoll.counts) return [];
-      return Object.entries(motmPoll.counts)
-        .map(([id, count]) => {
-          const opt = motmPoll.options.find((o) => o.id === id);
-          return {
-            id,
-            count,
-            player: opt,
-            percentage: motmPoll.total > 0 ? Math.round((count / motmPoll.total) * 100) : 0,
-          };
-        })
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3);
-    }, [motmPoll.counts, motmPoll.total, motmPoll.options]);
+    // Top 3 players by vote.
+    // Plain computations on purpose: this helper only runs when the poll is shown,
+    // and React hooks (useMemo etc.) must never be called conditionally — doing so
+    // crashed the whole match page ("client-side exception") once votes existed.
+    const top3 = !motmPoll.counts
+      ? []
+      : Object.entries(motmPoll.counts)
+          .map(([id, count]) => {
+            const opt = motmPoll.options.find((o) => o.id === id);
+            return {
+              id,
+              count,
+              player: opt,
+              percentage: motmPoll.total > 0 ? Math.round((count / motmPoll.total) * 100) : 0,
+            };
+          })
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3);
 
-    // Group options by team for the voting list
-    const filteredOptions = useMemo(() => {
-      if (!searchQuery.trim()) return motmPoll.options;
-      const q = searchQuery.toLowerCase();
-      return motmPoll.options.filter(
-        (o) => o.label.toLowerCase().includes(q) || (o.label_ar && o.label_ar.includes(q))
-      );
-    }, [motmPoll.options, searchQuery]);
+    // Options filtered by the search box
+    const q = searchQuery.trim().toLowerCase();
+    const filteredOptions = !q
+      ? motmPoll.options
+      : motmPoll.options.filter(
+          (o) => o.label.toLowerCase().includes(q) || (o.label_ar ? o.label_ar.includes(q) : false)
+        );
 
     return (
       <div className="space-y-4 pt-4 border-t border-white/10">
