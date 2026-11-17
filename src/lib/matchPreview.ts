@@ -20,6 +20,7 @@ const isFinished = (m: Match) => m.status === 'finished' && m.home_score != null
 
 /** Result of a finished match from one team's point of view (shootouts decide drawn knockout ties). */
 export function resultFor(match: Match, teamId: number): FormResult {
+  if (match.forfeit_both) return 'L'; // neither team showed up: a loss for both
   const isHome = match.home_team_id === teamId;
   const gf = (isHome ? match.home_score : match.away_score) ?? 0;
   const ga = (isHome ? match.away_score : match.home_score) ?? 0;
@@ -130,7 +131,8 @@ export function getMatchStakes(match: Match, matches: Match[]): string[] {
     played[id] = 0;
   }
   for (const m of groupMatches.filter(isFinished)) {
-    const r = resultFor(m, m.home_team_id);
+    // Neither team showed up: nobody gets points.
+    const r = m.forfeit_both ? null : resultFor(m, m.home_team_id);
     basePoints[m.home_team_id] += r === 'W' ? 3 : r === 'D' ? 1 : 0;
     basePoints[m.away_team_id] += r === 'L' ? 3 : r === 'D' ? 1 : 0;
     played[m.home_team_id] += 1;

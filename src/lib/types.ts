@@ -145,6 +145,8 @@ export interface Match {
   clock_period?: string | null;
   /** Team that did not show up, when the match was awarded by forfeit. */
   forfeit_team_id?: number | null;
+  /** Neither team showed up: a loss for both, 0 points, no goals. */
+  forfeit_both?: number | boolean | null;
   // Goalkeeper who actually played each side (null = the team's usual keeper)
   home_gk_id?: number | null;
   away_gk_id?: number | null;

@@ -53,6 +53,15 @@ export function calculateGroupStandings(
     home.played += 1;
     away.played += 1;
 
+    // Neither team showed up: both lose, no points, no goals.
+    if (m.forfeit_both) {
+      home.lost += 1;
+      away.lost += 1;
+      home.form = [...(home.form || []), 'L'];
+      away.form = [...(away.form || []), 'L'];
+      continue;
+    }
+
     home.goals_for += m.home_score;
     home.goals_against += m.away_score;
     away.goals_for += m.away_score;
@@ -111,6 +120,7 @@ export function calculateGroupStandings(
 
       for (const m of h2hMatches) {
         if (m.home_score === null || m.away_score === null) continue;
+        if (m.forfeit_both) continue; // nobody earned anything in that meeting
         const aScore = m.home_team_id === a.team_id ? m.home_score : m.away_score;
         const bScore = m.home_team_id === b.team_id ? m.home_score : m.away_score;
 

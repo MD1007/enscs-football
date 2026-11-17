@@ -738,7 +738,8 @@ export function updateMatchResult(
           guests_json = ?,
           shootout_json = ?,
           finished_at = ?,
-          forfeit_team_id = ?
+          forfeit_team_id = ?,
+          forfeit_both = ?
       WHERE id = ?
     `).run(
       data.home_score,
@@ -768,6 +769,7 @@ export function updateMatchResult(
       shootout.length > 0 ? JSON.stringify(shootout) : null,
       finishedAt,
       keepForfeit ? match.forfeit_team_id : null,
+      keepForfeit && match.forfeit_both ? 1 : 0,
       matchId
     );
 
@@ -809,6 +811,9 @@ export function updateMatchResult(
   });
 
   transaction();
+
+  // Last group result in: set up the runner-up playoff straight away.
+  if (match.stage === 'group' && data.status === 'finished') ensureRunnerUpPlayoff(adminUsername);
 }
 
 /**
@@ -831,18 +836,24 @@ export function recordForfeit(matchId: number, forfeitTeamId: number, goals: num
   if (!match.home_team_id || !match.away_team_id) {
     return { success: false as const, error: 'Both teams must be known before a forfeit can be recorded' };
   }
-  if (forfeitTeamId !== match.home_team_id && forfeitTeamId !== match.away_team_id) {
-    return { success: false as const, error: 'Choose which of the two teams did not show up' };
+  // forfeitTeamId = -1 means neither team showed up: a loss for both, 0-0, no points.
+  const both = forfeitTeamId === -1;
+  if (!both && forfeitTeamId !== match.home_team_id && forfeitTeamId !== match.away_team_id) {
+    return { success: false as const, error: 'Choose which team did not show up' };
   }
-  if (goals !== 5 && goals !== 10) {
+  if (both && match.stage !== 'group') {
+    return { success: false as const, error: 'A knockout match needs a winner: choose the team that did not show up' };
+  }
+  if (!both && goals !== 5 && goals !== 10) {
     return { success: false as const, error: 'The forfeit score must be 5-0 or 10-0' };
   }
 
-  const homeForfeits = forfeitTeamId === match.home_team_id;
-  const homeScore = homeForfeits ? 0 : goals;
-  const awayScore = homeForfeits ? goals : 0;
-  const winnerId = homeForfeits ? match.away_team_id : match.home_team_id;
-  const loserName = homeForfeits ? match.home_name : match.away_name;
+  const homeForfeits = both || forfeitTeamId === match.home_team_id;
+  const homeScore = both ? 0 : homeForfeits ? 0 : goals;
+  const awayScore = both ? 0 : homeForfeits ? goals : 0;
+  const winnerId = both ? null : homeForfeits ? match.away_team_id : match.home_team_id;
+  const loserName = both ? 'neither team' : homeForfeits ? match.home_name : match.away_name;
+  const storedForfeitTeam = both ? match.home_team_id : forfeitTeamId;
 
   db.transaction(() => {
     db.prepare('DELETE FROM match_events WHERE match_id = ?').run(matchId);
@@ -851,13 +862,13 @@ export function recordForfeit(matchId: number, forfeitTeamId: number, goals: num
          home_score = ?, away_score = ?, home_penalties = NULL, away_penalties = NULL,
          status = 'finished', winner_team_id = ?,
          mvp_player_id = NULL, mvp_mode = 'manual', mvp_score = NULL,
-         forfeit_team_id = ?, finished_at = ?,
+         forfeit_team_id = ?, forfeit_both = ?, finished_at = ?,
          clock_running = 0, clock_started_at = NULL, clock_accumulated_ms = 0, clock_period = NULL,
          home_gk_id = NULL, away_gk_id = NULL,
          home_saves = 0, away_saves = 0, home_pen_saves = 0, away_pen_saves = 0,
          guests_json = NULL, shootout_json = NULL
        WHERE id = ?`
-    ).run(homeScore, awayScore, winnerId, forfeitTeamId, Date.now(), matchId);
+    ).run(homeScore, awayScore, winnerId, storedForfeitTeam, both ? 1 : 0, Date.now(), matchId);
 
     if (match.stage === 'semi_final') checkAndAdvanceKnockout();
 
@@ -868,7 +879,15 @@ export function recordForfeit(matchId: number, forfeitTeamId: number, goals: num
     );
   })();
 
-  return { success: true as const, home_score: homeScore, away_score: awayScore, forfeit_team_id: forfeitTeamId };
+  if (match.stage === 'group') ensureRunnerUpPlayoff(adminUsername);
+
+  return {
+    success: true as const,
+    home_score: homeScore,
+    away_score: awayScore,
+    forfeit_team_id: storedForfeitTeam,
+    forfeit_both: both,
+  };
 }
 
 /**
@@ -1115,6 +1134,29 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
     step: 'draw',
     message: `Semi-finals drawn: ${name(pool[0])} vs ${name(pool[1])} and ${name(pool[2])} vs ${name(pool[3])}.`,
   };
+}
+
+/**
+ * Creates the runner-up playoff by itself as soon as the group stage is complete
+ * (runs at server start and after every saved result). Does nothing if the playoff
+ * already has its teams, if the semi-finals are already drawn, or while group
+ * matches remain.
+ */
+export function ensureRunnerUpPlayoff(adminUsername = 'system') {
+  try {
+    if (unfinishedGroupMatches() > 0) return;
+    const playoff = db.prepare(`SELECT home_team_id, away_team_id FROM matches WHERE stage = 'playoff' LIMIT 1`).get() as
+      | { home_team_id: number | null; away_team_id: number | null }
+      | undefined;
+    if (playoff && playoff.home_team_id && playoff.away_team_id) return;
+    const semisDrawn = db
+      .prepare(`SELECT 1 FROM matches WHERE stage = 'semi_final' AND (home_team_id IS NOT NULL OR away_team_id IS NOT NULL)`)
+      .get();
+    if (semisDrawn) return;
+    autoPopulateKnockoutStage(adminUsername);
+  } catch (err) {
+    console.error('[knockout] could not create the runner-up playoff:', err);
+  }
 }
 
 /**

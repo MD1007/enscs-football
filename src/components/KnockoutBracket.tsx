@@ -23,6 +23,7 @@ export default function KnockoutBracket({
   const sf1 = matches.find((m) => m.stage === 'semi_final' && m.id % 2 !== 0) || matches.filter(m => m.stage === 'semi_final')[0];
   const sf2 = matches.find((m) => m.stage === 'semi_final' && m.id !== sf1?.id) || matches.filter(m => m.stage === 'semi_final')[1];
   const thirdPlace = matches.find((m) => m.stage === 'third_place');
+  const playoff = matches.find((m) => m.stage === 'playoff');
   const finalMatch = matches.find((m) => m.stage === 'final');
 
   // The runner-up playoff is shown in the match list, not in the bracket itself.
@@ -175,7 +176,17 @@ export default function KnockoutBracket({
         </div>
 
         <div className="pt-2.5 mt-1 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
-          <span>{new Date(match.scheduled_time).toLocaleDateString()}</span>
+          <span>
+            {match.is_time_set
+              ? new Date(match.scheduled_time).toLocaleString('en-GB', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : 'Date to be announced'}
+          </span>
           <span>{match.venue || 'Terrain ENSCS'}</span>
         </div>
       </div>
@@ -195,6 +206,19 @@ export default function KnockoutBracket({
           Single elimination bracket. In case of a draw, matches are decided immediately by a penalty shootout.
         </p>
       </div>
+
+      {/* Runner-up playoff: the winner takes the 4th semi-final place */}
+      {playoff && (
+        <div className="max-w-md mx-auto space-y-3">
+          <div className="text-center">
+            <h3 className="text-sm font-bold text-purple-300 uppercase tracking-wider">Runner-up Playoff</h3>
+            <p className="text-xs text-slate-400">The two best 2nd-placed teams play for the 4th semi-final place</p>
+          </div>
+          <div className="p-1 rounded-2xl bg-gradient-to-br from-purple-500/40 via-pitch-border to-purple-500/20">
+            {renderBracketMatch(playoff, '2nd-place Playoff', 'Best runner-up 1', 'Best runner-up 2')}
+          </div>
+        </div>
+      )}
 
       {/* Bracket Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">

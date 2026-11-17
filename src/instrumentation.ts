@@ -10,5 +10,13 @@ export async function register() {
     } catch (err) {
       console.error('[persistence] startup failed:', err);
     }
+    // After the data is restored: if the group stage is over, make sure the
+    // runner-up playoff exists.
+    try {
+      const { ensureRunnerUpPlayoff } = await import('./lib/tournamentService');
+      ensureRunnerUpPlayoff();
+    } catch (err) {
+      console.error('[knockout] startup check failed:', err);
+    }
   }
 }

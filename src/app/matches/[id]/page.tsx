@@ -203,8 +203,15 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
           </span>
           {match.status === 'finished' && match.forfeit_team_id && (
             <p className="text-xs font-bold text-amber-300 mb-3" dir="auto">
-              🏳 Awarded by forfeit:{' '}
-              {match.forfeit_team_id === match.home_team_id ? match.home_team_name : match.away_team_name} did not show up
+              {match.forfeit_both ? (
+                '🏳 Neither team showed up: a loss for both, no points'
+              ) : (
+                <>
+                  🏳 Awarded by forfeit:{' '}
+                  {match.forfeit_team_id === match.home_team_id ? match.home_team_name : match.away_team_name} did not
+                  show up
+                </>
+              )}
             </p>
           )}
           <LiveMinute

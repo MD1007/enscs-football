@@ -141,6 +141,7 @@ export function initDatabase() {
     // Clock period (first half / half time / second half) and matches awarded by forfeit
     'ALTER TABLE matches ADD COLUMN clock_period TEXT',
     'ALTER TABLE matches ADD COLUMN forfeit_team_id INTEGER',
+    'ALTER TABLE matches ADD COLUMN forfeit_both INTEGER DEFAULT 0',
   ];
 
   for (const sql of migrations) {
@@ -576,6 +577,31 @@ function resetKnockoutWhileGroupsRunning() {
   );
 }
 
+/**
+ * فريق الرجال vs FC Rono (16 Nov): neither team showed up (confirmed by the organiser).
+ * It was stored as a 0-0, which gave each team a point. Now a loss for both, 0 points.
+ */
+function recordDoubleNoShowRijalRono() {
+  const res = db
+    .prepare(
+      `UPDATE matches
+       SET forfeit_both = 1, forfeit_team_id = home_team_id, home_score = 0, away_score = 0,
+           winner_team_id = NULL, mvp_player_id = NULL, mvp_mode = 'manual', mvp_score = NULL
+       WHERE stage = 'group' AND status = 'finished'
+         AND home_team_id = (SELECT id FROM teams WHERE name = 'فريق الرجال')
+         AND away_team_id = (SELECT id FROM teams WHERE name = 'FC Rono')
+         AND NOT EXISTS (SELECT 1 FROM match_events e WHERE e.match_id = matches.id)`
+    )
+    .run();
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'FORFEIT',
+    res.changes > 0
+      ? 'فريق الرجال vs FC Rono: neither team showed up, recorded as a loss for both (0 points)'
+      : 'فريق الرجال vs FC Rono: double no-show not applied (match changed)',
+    'system'
+  );
+}
+
 export function applyRosterCorrections() {
   try {
     const jokerTeamId = ensureJokerTeam();
@@ -600,6 +626,7 @@ export function applyRosterCorrections() {
       runOnce('forfeit_rule_v1', updateForfeitRule);
       runOnce('unmark_zoro_deddou_forfeit_v1', unmarkPlayedZoroDeddou);
       runOnce('reset_knockout_until_groups_v1', resetKnockoutWhileGroupsRunning);
+      runOnce('double_forfeit_rijal_rono_v1', recordDoubleNoShowRijalRono);
     }
   } catch (err) {
     console.error('Joker / goalkeeper data upgrade failed:', err);
