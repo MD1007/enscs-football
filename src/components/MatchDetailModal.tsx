@@ -84,6 +84,7 @@ export default function MatchDetailModal({ match, onClose, context }: MatchDetai
 
   const getStageName = () => {
     if (match.stage === 'group') return `Group ${match.group_id} • Matchday ${match.matchday || 1}`;
+    if (match.stage === 'playoff') return '2nd-place Playoff';
     if (match.stage === 'semi_final') return 'Semi-Final';
     if (match.stage === 'third_place') return '3rd Place Playoff';
     if (match.stage === 'final') return 'Grand Final 🏆';

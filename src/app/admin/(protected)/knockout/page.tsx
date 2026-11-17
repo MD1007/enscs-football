@@ -33,37 +33,47 @@ export default function AdminKnockoutPage() {
   const finishedGroupCount = groupMatches.filter((m) => m.status === 'finished').length;
   const isGroupFinished = groupMatches.length > 0 && finishedGroupCount === groupMatches.length;
 
-  const handleAutoPopulate = async () => {
-    if (!isGroupFinished) {
-      if (
-        !confirm(
-          `Notice: Group stage is incomplete (${finishedGroupCount}/${groupMatches.length} played). Are you sure you want to populate knockout brackets based on current interim rankings?`
-        )
-      ) {
-        return;
-      }
-    }
+  const playoffMatch = matches.find((m) => m.stage === 'playoff');
+  const playoffSet = Boolean(playoffMatch?.home_team_id && playoffMatch?.away_team_id);
+  const semisDrawn = matches.some((m) => m.stage === 'semi_final' && (m.home_team_id || m.away_team_id));
+  const nextStep = !isGroupFinished
+    ? 'locked'
+    : semisDrawn
+    ? 'done'
+    : !playoffSet
+    ? 'playoff'
+    : playoffMatch?.status === 'finished'
+    ? 'draw'
+    : 'wait_playoff';
 
+  const callKnockout = async (action: 'auto_populate' | 'reset') => {
     setPopulating(true);
     setFeedback(null);
-
     try {
       const res = await fetch('/api/admin/knockout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto_populate' }),
+        body: JSON.stringify({ action }),
       });
-
       const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Failed to populate bracket');
-
-      setFeedback({ type: 'success', message: 'Knockout bracket populated with qualified teams!' });
+      if (!res.ok) throw new Error(resData.error || 'Request failed');
+      setFeedback({ type: 'success', message: resData.message || 'Done.' });
       fetchData();
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Auto-qualification failed' });
+      setFeedback({ type: 'error', message: err.message || 'Request failed' });
     } finally {
       setPopulating(false);
     }
+  };
+
+  const handleAutoPopulate = () => {
+    if (nextStep === 'draw' && !confirm('Run the random draw for the semi-finals now? It cannot be redone without a reset.')) return;
+    void callKnockout('auto_populate');
+  };
+
+  const handleReset = () => {
+    if (!confirm('Clear every knockout fixture that has not been played yet (teams and fan votes)?')) return;
+    void callKnockout('reset');
   };
 
   const sfMatches = matches.filter((m) => m.stage === 'semi_final');
@@ -107,26 +117,78 @@ export default function AdminKnockoutPage() {
               <h3 className="font-bold text-white text-lg">Random Draw & Qualification Engine</h3>
             </div>
             <p className="text-xs text-slate-300">
-              Evaluates qualified teams: Group A Leader ({standings.A?.[0]?.team_name || 'TBD'}), Group B Leader (
-              {standings.B?.[0]?.team_name || 'TBD'}), Group C Leader ({standings.C?.[0]?.team_name || 'TBD'}), and the
-              2nd-place playoff winner ({bestSecond?.[0]?.team_name || 'TBD'}). A random draw pairs them into Semi-Final 1 and Semi-Final 2.
+              As in the rules: when every group match is finished, the two best runners-up play a playoff for the 4th
+              place. Then the three group winners and the playoff winner are drawn at random into the two semi-finals.
             </p>
             <div className="text-[11px] text-slate-400 pt-1">
               Group Progress: <strong className="text-emerald-400">{finishedGroupCount}</strong> /{' '}
               <strong>{groupMatches.length}</strong> matches completed.
             </div>
+            <div className="text-[11px] text-slate-300 pt-1" dir="auto">
+              {nextStep === 'locked' &&
+                `Locked until the group stage ends (${groupMatches.length - finishedGroupCount} group match${
+                  groupMatches.length - finishedGroupCount === 1 ? '' : 'es'
+                } left). Current leaders: ${standings.A?.[0]?.team_name || 'TBD'}, ${standings.B?.[0]?.team_name || 'TBD'}, ${
+                  standings.C?.[0]?.team_name || 'TBD'
+                }; best runners-up: ${bestSecond?.[0]?.team_name || 'TBD'} and ${bestSecond?.[1]?.team_name || 'TBD'}.`}
+              {nextStep === 'playoff' &&
+                `Next: create the playoff ${bestSecond?.[0]?.team_name || 'TBD'} vs ${bestSecond?.[1]?.team_name || 'TBD'}.`}
+              {nextStep === 'wait_playoff' &&
+                `Waiting for the playoff ${playoffMatch?.home_team_name} vs ${playoffMatch?.away_team_name} to be played (enter its result in the Match Center).`}
+              {nextStep === 'draw' && 'Playoff finished: ready for the semi-final draw.'}
+              {nextStep === 'done' && 'Semi-finals drawn.'}
+            </div>
           </div>
 
-          <button
-            onClick={handleAutoPopulate}
-            disabled={populating}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2 whitespace-nowrap"
-          >
-            <RefreshCw className={`w-4 h-4 ${populating ? 'animate-spin' : ''}`} />
-            <span>{populating ? 'Drawing...' : '🎲 Run Random Draw & Populate Bracket'}</span>
-          </button>
+          <div className="flex flex-col gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleAutoPopulate}
+              disabled={populating || nextStep === 'locked' || nextStep === 'wait_playoff' || nextStep === 'done'}
+              className="min-h-[48px] px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center justify-center space-x-2 whitespace-nowrap disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-4 h-4 ${populating ? 'animate-spin' : ''}`} />
+              <span>
+                {populating
+                  ? 'Working...'
+                  : nextStep === 'playoff'
+                  ? 'Create 2nd-place Playoff'
+                  : nextStep === 'draw'
+                  ? '🎲 Run Semi-final Draw'
+                  : nextStep === 'done'
+                  ? 'Semi-finals drawn'
+                  : nextStep === 'wait_playoff'
+                  ? 'Waiting for the playoff'
+                  : 'Locked: group stage running'}
+              </span>
+            </button>
+            <button
+              onClick={handleReset}
+              disabled={populating}
+              className="min-h-[44px] px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-300 font-bold text-[11px] uppercase tracking-wider transition"
+            >
+              Reset knockout fixtures
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* 2nd-place playoff */}
+      {playoffMatch && (
+        <div className="glass-panel rounded-2xl p-5 border border-purple-500/40 bg-pitch-card/80 space-y-2 text-xs">
+          <div className="flex items-center justify-between text-purple-300 font-black uppercase tracking-wider">
+            <span>2nd-place Playoff (4th semi-final place)</span>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-white/5">{playoffMatch.status}</span>
+          </div>
+          <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
+            <span dir="auto">{playoffMatch.home_team_name || 'Best runner-up 1'}</span>
+            <span className="font-mono text-purple-300">{playoffMatch.home_score ?? '-'}</span>
+          </div>
+          <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
+            <span dir="auto">{playoffMatch.away_team_name || 'Best runner-up 2'}</span>
+            <span className="font-mono text-purple-300">{playoffMatch.away_score ?? '-'}</span>
+          </div>
+        </div>
+      )}
 
       {/* Knockout Fixtures List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

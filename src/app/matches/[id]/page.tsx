@@ -114,6 +114,8 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
   const stageShort =
     match.stage === 'group'
       ? `Group ${match.group_id}`
+      : match.stage === 'playoff'
+      ? '2nd-place Playoff'
       : match.stage === 'semi_final'
       ? 'Semi-Final'
       : match.stage === 'third_place'
@@ -135,6 +137,7 @@ export default function MatchDetailPage({ params }: MatchPageProps) {
 
   const getStageTitle = () => {
     if (match.stage === 'group') return `Group ${match.group_id} • Matchday ${match.matchday || 1}`;
+    if (match.stage === 'playoff') return '2nd-place Playoff · 4th semi-final place';
     if (match.stage === 'semi_final') return 'Semi-Final Match';
     if (match.stage === 'third_place') return '3rd Place Bronze Playoff';
     if (match.stage === 'final') return 'Grand Final 🏆';

@@ -515,6 +515,67 @@ function updateQualificationRulePlayoffAndDraw() {
   ).run();
 }
 
+/**
+ * Zoro 0-5 FC deddou (16 Nov) was played: five goals at real minutes, MAHDI DAHMANI in
+ * goal for FC deddou with 7 saves. It had been flagged as a forfeit, which removed every
+ * player's appearance, the clean sheet and the MVP. The flag is removed; nothing else changes.
+ */
+function unmarkPlayedZoroDeddou() {
+  const res = db
+    .prepare(
+      `UPDATE matches SET forfeit_team_id = NULL, notes = NULL
+       WHERE stage = 'group' AND status = 'finished' AND forfeit_team_id IS NOT NULL
+         AND home_team_id = (SELECT id FROM teams WHERE name = 'Zoro')
+         AND away_team_id = (SELECT id FROM teams WHERE name = 'FC deddou')
+         AND (SELECT count(*) FROM match_events e WHERE e.match_id = matches.id AND e.event_type = 'goal') > 0`
+    )
+    .run();
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'DATA_FIX',
+    res.changes > 0
+      ? 'Zoro 0-5 FC deddou restored as a played match (it had been flagged as a forfeit)'
+      : 'Zoro vs FC deddou: nothing to restore',
+    'system'
+  );
+}
+
+/**
+ * The semi-finals were drawn while group matches were still to be played. Every unplayed
+ * knockout fixture is emptied (teams and fan votes) and the stage goes back to the group
+ * stage. Played knockout matches are never touched.
+ */
+function resetKnockoutWhileGroupsRunning() {
+  const unfinished = (
+    db.prepare(`SELECT count(*) AS c FROM matches WHERE stage = 'group' AND status != 'finished'`).get() as { c: number }
+  ).c;
+  if (unfinished === 0) return;
+  const open = db
+    .prepare(
+      `SELECT id FROM matches m WHERE m.stage != 'group' AND m.status != 'finished'
+         AND NOT EXISTS (SELECT 1 FROM match_events e WHERE e.match_id = m.id)`
+    )
+    .all() as { id: number }[];
+  for (const { id } of open) {
+    db.prepare(
+      `UPDATE matches SET home_team_id = NULL, away_team_id = NULL, home_score = NULL, away_score = NULL,
+         home_penalties = NULL, away_penalties = NULL, status = 'upcoming', winner_team_id = NULL,
+         mvp_player_id = NULL, mvp_score = NULL, home_gk_id = NULL, away_gk_id = NULL, guests_json = NULL,
+         shootout_json = NULL, forfeit_team_id = NULL
+       WHERE id = ?`
+    ).run(id);
+    db.prepare('DELETE FROM fan_votes WHERE match_id = ?').run(id);
+  }
+  const playedKnockout = db.prepare(`SELECT 1 FROM matches WHERE stage != 'group' AND status = 'finished'`).get();
+  if (!playedKnockout) {
+    db.prepare(`UPDATE tournament_settings SET value = 'Group Stage' WHERE key = 'current_stage'`).run();
+  }
+  db.prepare('INSERT INTO activity_logs (action, details, admin_username) VALUES (?, ?, ?)').run(
+    'RESET_KNOCKOUT',
+    `Knockout fixtures cleared (${open.length}): ${unfinished} group match(es) still to play`,
+    'system'
+  );
+}
+
 export function applyRosterCorrections() {
   try {
     const jokerTeamId = ensureJokerTeam();
@@ -525,10 +586,8 @@ export function applyRosterCorrections() {
     runOnce('pot_min_apps_1_v1', () => {
       db.prepare("UPDATE tournament_settings SET value = '1' WHERE key = 'pot_min_appearances'").run();
     });
-    runOnce('mark_forfeit_matches_39_40_v1', () => {
-      db.prepare("UPDATE matches SET forfeit_team_id = 21, notes = 'forfeit' WHERE id = 39 AND (forfeit_team_id IS NULL OR notes IS NULL)").run();
-      db.prepare("UPDATE matches SET forfeit_team_id = 23, notes = 'forfeit' WHERE id = 40 AND (forfeit_team_id IS NULL OR notes IS NULL)").run();
-    });
+    // (An earlier one-off fix, 'mark_forfeit_matches_39_40_v1', flagged matches 39 and 40 as
+    // forfeits by number. It is not repeated: see 'unmark_zoro_deddou_forfeit_v1' below.)
 
     // Only on a database that already holds the tournament (not on an empty/fresh one).
     const hasResults = db.prepare(`SELECT 1 FROM matches WHERE status = 'finished' LIMIT 1`).get();
@@ -539,6 +598,8 @@ export function applyRosterCorrections() {
       runOnce('schedule_nov14_v1', () => applyFixtureSchedule(SCHEDULE_NOV_14));
       runOnce('joker_taki_pvc_barca_v1', () => addTakiGoalPvcBarca(jokerTeamId));
       runOnce('forfeit_rule_v1', updateForfeitRule);
+      runOnce('unmark_zoro_deddou_forfeit_v1', unmarkPlayedZoroDeddou);
+      runOnce('reset_knockout_until_groups_v1', resetKnockoutWhileGroupsRunning);
     }
   } catch (err) {
     console.error('Joker / goalkeeper data upgrade failed:', err);

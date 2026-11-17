@@ -25,8 +25,12 @@ export default function KnockoutBracket({
   const thirdPlace = matches.find((m) => m.stage === 'third_place');
   const finalMatch = matches.find((m) => m.stage === 'final');
 
+  // The runner-up playoff is shown in the match list, not in the bracket itself.
   const hasAnyKnockoutTeam = matches.some(
-    (m) => m.stage !== 'group' && (m.home_team_id !== null || m.away_team_id !== null)
+    (m) =>
+      m.stage !== 'group' &&
+      m.stage !== 'playoff' &&
+      ((m.home_team_id !== null && m.home_team_id !== undefined) || (m.away_team_id !== null && m.away_team_id !== undefined))
   );
 
   // If group stage is incomplete and no knockout teams set yet

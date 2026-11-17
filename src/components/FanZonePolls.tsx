@@ -172,6 +172,7 @@ export default function FanZonePolls({ matches }: FanZonePollsProps) {
 
   const getStageLabel = (m: Match) => {
     if (m.stage === 'group') return `Group ${m.group_id} • MD${m.matchday || 1}`;
+    if (m.stage === 'playoff') return '2nd-place Playoff';
     if (m.stage === 'semi_final') return 'Semi-Final';
     if (m.stage === 'third_place') return '3rd Place';
     if (m.stage === 'final') return 'Final 🏆';

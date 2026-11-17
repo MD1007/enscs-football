@@ -317,22 +317,12 @@ export function aggregatePlayerStats(
       }
     }
 
-    // A forfeit was never played: strictly 0 appearances, 0 clean sheets, 0 goals conceded, and 0 clean sheet points for anyone.
-    const isForfeit =
-      Boolean(m.forfeit_team_id) ||
-      Boolean(m.notes && /forfeit|انسحاب|did not show up|insihab/i.test(m.notes)) ||
-      m.id === 29 ||
-      m.id === 34 ||
-      m.id === 40;
-
-    // Matches that must never award clean sheets or clean sheet bonus points (forfeits, 0-0 unplayed/draws, awarded 0-5s).
-    const isNoCleanSheetMatch =
-      isForfeit ||
-      m.id === 29 ||
-      m.id === 34 ||
-      m.id === 39 ||
-      m.id === 40 ||
-      (m.home_score === 0 && m.away_score === 0);
+    // A forfeit was never played: no appearances, clean sheets, goals conceded, MVP or
+    // clean-sheet points for anyone. A match is a forfeit only when it was recorded as one
+    // (Forfeit button). A real match that ends with a team scoring 0 is a clean sheet for
+    // the other side's keeper, as in the rules.
+    const isForfeit = Boolean(m.forfeit_team_id);
+    const isNoCleanSheetMatch = isForfeit;
 
     if (m.status === 'finished' && !isForfeit) {
       const homeScore = m.home_score ?? 0;

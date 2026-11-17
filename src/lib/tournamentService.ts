@@ -80,11 +80,12 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     LEFT JOIN players mp ON m.mvp_player_id = mp.id
     LEFT JOIN teams mt ON mp.team_id = mt.id
     ORDER BY CASE 
-               WHEN m.stage = 'group' THEN 1 
-               WHEN m.stage = 'semi_final' THEN 2 
-               WHEN m.stage = 'third_place' THEN 3 
-               WHEN m.stage = 'final' THEN 4 
-             END ASC, 
+               WHEN m.stage = 'group' THEN 1
+               WHEN m.stage = 'playoff' THEN 2
+               WHEN m.stage = 'semi_final' THEN 3
+               WHEN m.stage = 'third_place' THEN 4
+               WHEN m.stage = 'final' THEN 5
+             END ASC,
              m.matchday ASC, 
              m.id ASC
   `).all() as any[];
@@ -990,31 +991,93 @@ export function checkAndAdvanceKnockout() {
   }
 }
 
+/** Group matches still to be played (anything not finished, cancelled included). */
+export function unfinishedGroupMatches(): number {
+  return (
+    db.prepare(`SELECT count(*) AS c FROM matches WHERE stage = 'group' AND status != 'finished'`).get() as { c: number }
+  ).c;
+}
+
+/** Winner of a finished knockout-style match (penalties decide a draw), or null. */
+function winnerOf(m: any): number | null {
+  if (!m || m.status !== 'finished' || !m.home_team_id || !m.away_team_id) return null;
+  if (m.winner_team_id) return m.winner_team_id;
+  if (m.home_score > m.away_score) return m.home_team_id;
+  if (m.away_score > m.home_score) return m.away_team_id;
+  if (m.home_penalties != null && m.away_penalties != null && m.home_penalties !== m.away_penalties) {
+    return m.home_penalties > m.away_penalties ? m.home_team_id : m.away_team_id;
+  }
+  return null;
+}
+
 /**
- * Automatically populates the Knockout Bracket via a Random Draw among qualified teams
+ * Knockout stage, as in the rules:
+ *  1. Nothing happens until every group match is finished.
+ *  2. Then the 2nd-place playoff is set up: the two best runners-up play for the 4th semi-final place.
+ *  3. Once that playoff is finished, the 3 group winners and the playoff winner are drawn at
+ *     random into Semi-Final 1 and Semi-Final 2.
+ * The same button does step 2, then step 3; it refuses anything out of order.
  */
 export function autoPopulateKnockoutStage(adminUsername: string) {
+  const remaining = unfinishedGroupMatches();
+  if (remaining > 0) {
+    throw new Error(
+      `The group stage is not finished: ${remaining} group match${remaining === 1 ? '' : 'es'} still to play. The knockout stage opens when every group match is finished.`
+    );
+  }
+
   const fullData = getFullTournamentData();
   const groupA = fullData.standings.A;
   const groupB = fullData.standings.B;
   const groupC = fullData.standings.C;
   const bestSecond = fullData.best_second;
 
-  if (!groupA.length || !groupB.length || !groupC.length || !bestSecond.length) {
+  if (!groupA.length || !groupB.length || !groupC.length || bestSecond.length < 2) {
     throw new Error('Group standings are incomplete.');
+  }
+
+  const sfMatches = db.prepare(`SELECT * FROM matches WHERE stage = 'semi_final' ORDER BY id ASC`).all() as any[];
+  if (sfMatches.length < 2) {
+    throw new Error('Semi-final fixtures are missing.');
+  }
+  if (sfMatches.some((m) => m.status !== 'upcoming' || m.home_team_id || m.away_team_id)) {
+    throw new Error('The semi-finals are already drawn. Reset the knockout stage first to draw again.');
+  }
+
+  // Step 2: the 2nd-place playoff
+  let playoff = db.prepare(`SELECT * FROM matches WHERE stage = 'playoff' ORDER BY id LIMIT 1`).get() as any;
+  if (!playoff || !playoff.home_team_id || !playoff.away_team_id) {
+    const home = bestSecond[0].team_id;
+    const away = bestSecond[1].team_id;
+    if (playoff) {
+      db.prepare(`UPDATE matches SET home_team_id = ?, away_team_id = ? WHERE id = ?`).run(home, away, playoff.id);
+    } else {
+      db.prepare(
+        `INSERT INTO matches (stage, group_id, matchday, home_team_id, away_team_id, status, scheduled_time, is_time_set, venue)
+         VALUES ('playoff', NULL, NULL, ?, ?, 'upcoming', ?, 0, 'Terrain ENSCS')`
+      ).run(home, away, new Date().toISOString().slice(0, 10) + 'T18:30:00');
+    }
+    db.prepare(`UPDATE tournament_settings SET value = 'Runner-up Playoff' WHERE key = 'current_stage'`).run();
+    logActivity(
+      'KNOCKOUT_PLAYOFF',
+      `2nd-place playoff set: ${bestSecond[0].team_name} vs ${bestSecond[1].team_name} (winner takes the 4th semi-final place)`,
+      adminUsername
+    );
+    return {
+      success: true,
+      step: 'playoff',
+      message: `2nd-place playoff created: ${bestSecond[0].team_name} vs ${bestSecond[1].team_name}. Set its date, play it, then press the button again for the semi-final draw.`,
+    };
+  }
+
+  const team4th = winnerOf(playoff);
+  if (!team4th) {
+    throw new Error('The 2nd-place playoff has not been won yet. Finish it (penalties decide a draw) before the semi-final draw.');
   }
 
   const team1A = groupA[0].team_id;
   const team1B = groupB[0].team_id;
   const team1C = groupC[0].team_id;
-  // 4th spot is the playoff winner / best runner-up
-  const team4th = bestSecond[0].team_id;
-
-  const sfMatches = db.prepare(`SELECT id FROM matches WHERE stage = 'semi_final' ORDER BY id ASC`).all() as any[];
-
-  if (sfMatches.length < 2) {
-    throw new Error('Semi-final fixtures are missing.');
-  }
 
   // Random Draw: Shuffle the 4 qualified teams (Fisher-Yates shuffle)
   const pool = [team1A, team1B, team1C, team4th];
@@ -1039,13 +1102,57 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
 
   db.prepare(`UPDATE tournament_settings SET value = 'Knockout Stage' WHERE key = 'current_stage'`).run();
 
+  const name = (id: number) =>
+    (db.prepare('SELECT name FROM teams WHERE id = ?').get(id) as { name: string } | undefined)?.name || `#${id}`;
   logActivity(
     'AUTO_POPULATE_KNOCKOUT',
-    `Random draw conducted for Semi-Finals: Match 1 (#${pool[0]} vs #${pool[1]}), Match 2 (#${pool[2]} vs #${pool[3]})`,
+    `Random draw for the semi-finals: ${name(pool[0])} vs ${name(pool[1])}, ${name(pool[2])} vs ${name(pool[3])}`,
     adminUsername
   );
 
-  return { success: true };
+  return {
+    success: true,
+    step: 'draw',
+    message: `Semi-finals drawn: ${name(pool[0])} vs ${name(pool[1])} and ${name(pool[2])} vs ${name(pool[3])}.`,
+  };
+}
+
+/**
+ * Empties every knockout fixture that has not been played (teams, scores, votes) and puts the
+ * tournament back in the group stage. Played knockout matches are never touched.
+ */
+export function resetKnockoutStage(adminUsername: string) {
+  const open = db
+    .prepare(
+      `SELECT m.id FROM matches m
+       WHERE m.stage != 'group' AND m.status != 'finished'
+         AND NOT EXISTS (SELECT 1 FROM match_events e WHERE e.match_id = m.id)`
+    )
+    .all() as { id: number }[];
+  const played = (
+    db.prepare(`SELECT count(*) AS c FROM matches WHERE stage != 'group' AND status = 'finished'`).get() as { c: number }
+  ).c;
+
+  db.transaction(() => {
+    for (const { id } of open) {
+      db.prepare(
+        `UPDATE matches SET home_team_id = NULL, away_team_id = NULL, home_score = NULL, away_score = NULL,
+           home_penalties = NULL, away_penalties = NULL, status = 'upcoming', winner_team_id = NULL,
+           mvp_player_id = NULL, mvp_score = NULL, home_gk_id = NULL, away_gk_id = NULL, guests_json = NULL,
+           shootout_json = NULL, forfeit_team_id = NULL, clock_running = 0, clock_started_at = NULL,
+           clock_accumulated_ms = 0, clock_period = NULL
+         WHERE id = ?`
+      ).run(id);
+      // Votes were cast for teams that are no longer in this fixture.
+      db.prepare('DELETE FROM fan_votes WHERE match_id = ?').run(id);
+    }
+    if (played === 0 && unfinishedGroupMatches() > 0) {
+      db.prepare(`UPDATE tournament_settings SET value = 'Group Stage' WHERE key = 'current_stage'`).run();
+    }
+  })();
+
+  logActivity('RESET_KNOCKOUT', `Knockout fixtures cleared (${open.length} unplayed match(es))`, adminUsername);
+  return { success: true, cleared: open.length, message: `Knockout stage reset: ${open.length} fixture(s) cleared.` };
 }
 
 export function getActivityLogs(limit: number = 50): ActivityLog[] {

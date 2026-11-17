@@ -97,6 +97,12 @@ export function getMatchStakes(match: Match, matches: Match[]): string[] {
   const home = match.home_team_name;
   const away = match.away_team_name;
 
+  if (match.stage === 'playoff') {
+    return [
+      'The two best runners-up meet: the winner takes the 4th place in the semi-final draw.',
+      'If the score is level at full time, a penalty shootout decides it.',
+    ];
+  }
   if (match.stage === 'semi_final') {
     return [
       'Winner goes to the Grand Final; the loser plays the 3rd place match.',

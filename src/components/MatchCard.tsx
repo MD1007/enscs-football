@@ -51,6 +51,7 @@ export default function MatchCard({ match, allMatches, allPlayers }: MatchCardPr
 
   const getStageLabel = () => {
     if (match.stage === 'group') return `Group ${match.group_id} • J${match.matchday || 1}`;
+    if (match.stage === 'playoff') return '2nd-place Playoff';
     if (match.stage === 'semi_final') return 'Semi-Final';
     if (match.stage === 'third_place') return '3rd Place';
     if (match.stage === 'final') return 'Final 🏆';

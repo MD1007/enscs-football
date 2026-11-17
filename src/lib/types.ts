@@ -2,7 +2,8 @@ export type GroupId = 'A' | 'B' | 'C';
 
 export type MatchStatus = 'upcoming' | 'live' | 'finished' | 'postponed' | 'cancelled';
 
-export type MatchStage = 'group' | 'semi_final' | 'third_place' | 'final';
+/** 'playoff' = the match between the two best runners-up for the 4th semi-final place. */
+export type MatchStage = 'group' | 'playoff' | 'semi_final' | 'third_place' | 'final';
 
 export type EventType = 'goal' | 'assist' | 'yellow_card' | 'red_card';
 
