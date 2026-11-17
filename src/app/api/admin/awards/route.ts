@@ -60,7 +60,7 @@ export async function PUT(request: Request) {
       revealAllAwards(isRevealed, admin.username);
     } else if (action === 'update_weights') {
       const { weights, min_appearances } = body;
-      updateScoringWeights(weights || {}, min_appearances || 3, admin.username);
+      updateScoringWeights(weights || {}, min_appearances ?? 1, admin.username);
     } else if (action === 'update_award') {
       const { award_key, winner_player_id, selection_mode, is_locked, is_revealed, data_json } = body;
       if (!award_key) {

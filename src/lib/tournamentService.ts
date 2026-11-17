@@ -167,7 +167,7 @@ export function getFullTournamentData(options?: { isAdmin?: boolean }): Tourname
     gk_save: Number(settings.mvp_weight_gk_save ?? 1),
     gk_penalty_save: Number(settings.mvp_weight_gk_penalty_save ?? 5),
   };
-  const minAppearances = Number(settings.pot_min_appearances ?? 3);
+  const minAppearances = Number(settings.pot_min_appearances ?? 1);
 
   // 6. Standings & Player Stats
   const standings: Record<GroupId, StandingRow[]> = {
@@ -991,7 +991,7 @@ export function checkAndAdvanceKnockout() {
 }
 
 /**
- * Automatically populates the Knockout Bracket once Group Stage is complete
+ * Automatically populates the Knockout Bracket via a Random Draw among qualified teams
  */
 export function autoPopulateKnockoutStage(adminUsername: string) {
   const fullData = getFullTournamentData();
@@ -1007,7 +1007,8 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
   const team1A = groupA[0].team_id;
   const team1B = groupB[0].team_id;
   const team1C = groupC[0].team_id;
-  const teamBest2nd = bestSecond[0].team_id;
+  // 4th spot is the playoff winner / best runner-up
+  const team4th = bestSecond[0].team_id;
 
   const sfMatches = db.prepare(`SELECT id FROM matches WHERE stage = 'semi_final' ORDER BY id ASC`).all() as any[];
 
@@ -1015,17 +1016,24 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
     throw new Error('Semi-final fixtures are missing.');
   }
 
-  // SF1: 1st Group A vs Best 2nd Place
-  // SF2: 1st Group B vs 1st Group C
+  // Random Draw: Shuffle the 4 qualified teams (Fisher-Yates shuffle)
+  const pool = [team1A, team1B, team1C, team4th];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  // SF1: Drawn Team 1 vs Drawn Team 2
+  // SF2: Drawn Team 3 vs Drawn Team 4
   db.prepare(`UPDATE matches SET home_team_id = ?, away_team_id = ? WHERE id = ?`).run(
-    team1A,
-    teamBest2nd,
+    pool[0],
+    pool[1],
     sfMatches[0].id
   );
 
   db.prepare(`UPDATE matches SET home_team_id = ?, away_team_id = ? WHERE id = ?`).run(
-    team1B,
-    team1C,
+    pool[2],
+    pool[3],
     sfMatches[1].id
   );
 
@@ -1033,7 +1041,7 @@ export function autoPopulateKnockoutStage(adminUsername: string) {
 
   logActivity(
     'AUTO_POPULATE_KNOCKOUT',
-    `Qualified teams allocated to Semi-Finals: 1st A (#${team1A}) vs Best 2nd (#${teamBest2nd}), and 1st B (#${team1B}) vs 1st C (#${team1C})`,
+    `Random draw conducted for Semi-Finals: Match 1 (#${pool[0]} vs #${pool[1]}), Match 2 (#${pool[2]} vs #${pool[3]})`,
     adminUsername
   );
 
@@ -1183,7 +1191,7 @@ export function revealAllAwards(isRevealed: boolean, adminUsername: string = 'MA
 
 export function updateScoringWeights(
   weights: Record<string, number>,
-  minAppearances: number = 3,
+  minAppearances: number = 1,
   adminUsername: string = 'MAHDIDHMN'
 ) {
   const insertSetting = db.prepare('INSERT OR REPLACE INTO tournament_settings (key, value) VALUES (?, ?)');

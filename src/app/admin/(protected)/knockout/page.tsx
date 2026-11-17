@@ -77,7 +77,7 @@ export default function AdminKnockoutPage() {
         <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Playoff Progression</span>
         <h1 className="text-3xl font-black text-white uppercase tracking-tight">Knockout Stage Manager</h1>
         <p className="text-sm text-slate-400">
-          Automatically populate semi-finals from group winners + best 2nd place, or manually configure playoff ties.
+          Randomly draw semi-final matchups from the 3 group winners and the 2nd-place playoff winner, or manually configure playoff ties.
         </p>
       </div>
 
@@ -104,12 +104,12 @@ export default function AdminKnockoutPage() {
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-bold text-white text-lg">Automatic Qualification Engine</h3>
+              <h3 className="font-bold text-white text-lg">Random Draw & Qualification Engine</h3>
             </div>
             <p className="text-xs text-slate-300">
-              Evaluates current standings: Group A Leader ({standings.A?.[0]?.team_name || 'TBD'}), Group B Leader (
-              {standings.B?.[0]?.team_name || 'TBD'}), Group C Leader ({standings.C?.[0]?.team_name || 'TBD'}) and the
-              best 2nd-place ({bestSecond?.[0]?.team_name || 'TBD'}).
+              Evaluates qualified teams: Group A Leader ({standings.A?.[0]?.team_name || 'TBD'}), Group B Leader (
+              {standings.B?.[0]?.team_name || 'TBD'}), Group C Leader ({standings.C?.[0]?.team_name || 'TBD'}), and the
+              2nd-place playoff winner ({bestSecond?.[0]?.team_name || 'TBD'}). A random draw pairs them into Semi-Final 1 and Semi-Final 2.
             </p>
             <div className="text-[11px] text-slate-400 pt-1">
               Group Progress: <strong className="text-emerald-400">{finishedGroupCount}</strong> /{' '}
@@ -123,7 +123,7 @@ export default function AdminKnockoutPage() {
             className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-pitch-darkest font-black text-xs uppercase tracking-wider shadow-glow transition flex items-center space-x-2 whitespace-nowrap"
           >
             <RefreshCw className={`w-4 h-4 ${populating ? 'animate-spin' : ''}`} />
-            <span>{populating ? 'Processing...' : 'Auto-Populate Bracket'}</span>
+            <span>{populating ? 'Drawing...' : '🎲 Run Random Draw & Populate Bracket'}</span>
           </button>
         </div>
       </div>
@@ -145,11 +145,11 @@ export default function AdminKnockoutPage() {
                   <span className="text-[10px] px-2 py-0.5 rounded bg-white/5">{m.status}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span>{m.home_team_name || `1st Place Group ${idx === 0 ? 'A' : 'B'}`}</span>
+                  <span>{m.home_team_name || 'Qualified Team (Random Draw)'}</span>
                   <span className="font-mono text-emerald-400">{m.home_score ?? '-'}</span>
                 </div>
                 <div className="font-bold text-sm text-white flex items-center justify-between" dir="auto">
-                  <span dir="auto">{m.away_team_name || (idx === 0 ? 'Best 2nd Place Team' : '1st Place Group C')}</span>
+                  <span dir="auto">{m.away_team_name || 'Qualified Team (Random Draw)'}</span>
                   <span className="font-mono text-emerald-400">{m.away_score ?? '-'}</span>
                 </div>
               </div>

@@ -506,11 +506,26 @@ function updateForfeitRule() {
   ).run();
 }
 
+/** Qualification rule update: Playoff between top two 2nd-place teams & random draw for semi-finals. */
+function updateQualificationRulePlayoffAndDraw() {
+  db.prepare(
+    `UPDATE tournament_rules
+     SET content = 'The group winners of Group A, Group B, and Group C automatically qualify for the semi-finals.\nTo ensure fairness, the fourth semi-final spot is decided by an official playoff match between the top two 2nd-place teams across all groups (مباراة فاصلة بين أفضل ثانيين).\nSemi-final matchups are determined by a random draw.'
+     WHERE id = 'qualification'`
+  ).run();
+}
+
 export function applyRosterCorrections() {
   try {
     const jokerTeamId = ensureJokerTeam();
     upgradeGoalkeeperScoring();
     convertGuestKeeperToJoker(jokerTeamId);
+
+    runOnce('update_rules_playoff_draw_v1', updateQualificationRulePlayoffAndDraw);
+    runOnce('pot_min_apps_1_v1', () => {
+      db.prepare("UPDATE tournament_settings SET value = '1' WHERE key = 'pot_min_appearances'").run();
+    });
+
     // Only on a database that already holds the tournament (not on an empty/fresh one).
     const hasResults = db.prepare(`SELECT 1 FROM matches WHERE status = 'finished' LIMIT 1`).get();
     if (hasResults) {
@@ -634,7 +649,7 @@ function seedInitialData() {
   insertWeight.run('mvp_weight_gk_assist', '6');
   insertWeight.run('mvp_weight_gk_save', '1');
   insertWeight.run('mvp_weight_gk_penalty_save', '5');
-  insertWeight.run('pot_min_appearances', '3');
+  insertWeight.run('pot_min_appearances', '1');
   insertWeight.run('fan_motm_window_minutes', '60');
 
   // Seed default 7 awards in tournament_awards table
@@ -671,7 +686,7 @@ function seedInitialData() {
       'qualification',
       'Knockout',
       'Qualification to Knockout Stage',
-      'The group winners of Group A, Group B, and Group C automatically qualify for the semi-finals.\nThe fourth semi-finalist is the best second-place team across all three groups based on points, goal difference, and goals scored.',
+      'The group winners of Group A, Group B, and Group C automatically qualify for the semi-finals.\nTo ensure fairness, the fourth semi-final spot is decided by an official playoff match between the top two 2nd-place teams across all groups (مباراة فاصلة بين أفضل ثانيين).\nSemi-final matchups are determined by a random draw.',
       3
     );
     insertRule.run(

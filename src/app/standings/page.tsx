@@ -75,15 +75,15 @@ export default function StandingsPage() {
             <Award className="w-5 h-5 text-amber-400" />
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                Best Second-Place Race (Wildcard Semi-Finalist)
+                Best Second-Place Race (Top 2 to Playoff Match)
               </h3>
               <p className="text-xs text-slate-400">
-                The top-ranked 2nd place team across Group A, B, and C earns the 4th semi-final ticket.
+                The top two 2nd-place teams across Groups A, B, and C contest an official playoff match for the 4th semi-final ticket.
               </p>
             </div>
           </div>
           <span className="text-xs font-bold text-amber-400 bg-amber-400/15 border border-amber-400/30 px-2.5 py-1 rounded-full uppercase">
-            1 Qualifies
+            Top 2 to Playoff
           </span>
         </div>
 
@@ -139,9 +139,9 @@ export default function StandingsPage() {
                       {row.points}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {isBest ? (
+                      {idx < 2 ? (
                         <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                          Currently Qualified
+                          Playoff Spot
                         </span>
                       ) : (
                         <span className="text-[10px] text-slate-500 font-semibold uppercase">

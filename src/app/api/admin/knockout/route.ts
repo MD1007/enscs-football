@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    if (body.action === 'auto_populate') {
+    if (body.action === 'auto_populate' || body.action === 'random_draw') {
       const res = autoPopulateKnockoutStage(admin.username);
       return NextResponse.json(res);
     }

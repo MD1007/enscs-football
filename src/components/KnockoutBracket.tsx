@@ -70,22 +70,22 @@ export default function KnockoutBracket({
               />
             </div>
             <p className="text-[11px] text-slate-500 italic">
-              Qualification: 1st place in Group A, B, C + the Best 2nd-place team across all groups.
+              Qualification: Group winners (A, B, C) + winner of the 2nd-place playoff. Semi-final pairings are determined by a random draw.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 text-xs text-slate-400 max-w-xl mx-auto">
             <div className="p-3 rounded-xl bg-pitch-card border border-emerald-500/20">
-              <span className="block text-emerald-400 font-bold mb-1">Group A Winner</span>
-              <span className="text-slate-500 text-[11px]">To Semi-Final 1</span>
-            </div>
-            <div className="p-3 rounded-xl bg-pitch-card border border-blue-500/20">
-              <span className="block text-blue-400 font-bold mb-1">Group B & C Winners</span>
-              <span className="text-slate-500 text-[11px]">To Semi-Final 2</span>
+              <span className="block text-emerald-400 font-bold mb-1">Group Winners</span>
+              <span className="text-slate-500 text-[11px]">Group A, B, C Winners</span>
             </div>
             <div className="p-3 rounded-xl bg-pitch-card border border-amber-500/20">
-              <span className="block text-amber-400 font-bold mb-1">Best 2nd Place</span>
-              <span className="text-slate-500 text-[11px]">Wildcard Semi-Finalist</span>
+              <span className="block text-amber-400 font-bold mb-1">2nd-Place Playoff</span>
+              <span className="text-slate-500 text-[11px]">Top 2 Runners-Up Playoff</span>
+            </div>
+            <div className="p-3 rounded-xl bg-pitch-card border border-blue-500/20">
+              <span className="block text-blue-400 font-bold mb-1">Semi-Finals Draw</span>
+              <span className="text-slate-500 text-[11px]">Random Draw (قرعة عشوائية)</span>
             </div>
           </div>
         </div>
@@ -201,8 +201,8 @@ export default function KnockoutBracket({
               <span>Semi-Finals</span>
             </h3>
           </div>
-          {renderBracketMatch(sf1, 'Semi-Final 1', '1st Place Group A', 'Best 2nd Place Team')}
-          {renderBracketMatch(sf2, 'Semi-Final 2', '1st Place Group B', '1st Place Group C')}
+          {renderBracketMatch(sf1, 'Semi-Final 1', 'Qualified Team (Random Draw)', 'Qualified Team (Random Draw)')}
+          {renderBracketMatch(sf2, 'Semi-Final 2', 'Qualified Team (Random Draw)', 'Qualified Team (Random Draw)')}
         </div>
 
         {/* Center: Grand Final Column */}
@@ -236,6 +236,9 @@ export default function KnockoutBracket({
               <AlertCircle className="w-4 h-4 text-emerald-400" />
               <span>Progression Rules</span>
             </div>
+            <p>
+              • Group winners & 2nd-place playoff winner enter a random draw for Semi-Finals.
+            </p>
             <p>
               • Winners of SF1 & SF2 contest the Grand Final.
             </p>

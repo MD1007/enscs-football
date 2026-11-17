@@ -207,7 +207,7 @@ export function getMatchStakes(match: Match, matches: Match[]): string[] {
       )} (${basePoints[match.away_team_id]} pts).`
     );
   }
-  lines.push('Group winners qualify for the semi-finals, joined by the best runner-up across the three groups.');
+  lines.push('Group winners qualify for the semi-finals, while the top two runners-up contest a playoff for the final spot. Semi-final matchups are drawn randomly.');
 
   return lines;
 }

@@ -261,7 +261,7 @@ export function aggregatePlayerStats(
   teams: Team[],
   matches: Match[],
   customWeights?: Record<string, number>,
-  customMinAppearances: number = 3
+  customMinAppearances: number = 1
 ) {
   const playerMap: Record<number, Player> = {};
   const teamMap: Record<number, Team> = {};
@@ -317,8 +317,10 @@ export function aggregatePlayerStats(
       }
     }
 
-    // A forfeit was never played: no appearances, clean sheets or goals conceded for anyone.
-    if (m.status === 'finished' && !m.forfeit_team_id) {
+    // A forfeit was never played: strictly 0 appearances, 0 clean sheets, 0 goals conceded, and 0 clean sheet points for anyone.
+    const isForfeit = Boolean(m.forfeit_team_id) || Boolean(m.notes && /forfeit|انسحاب|did not show up|insihab/i.test(m.notes));
+
+    if (m.status === 'finished' && !isForfeit) {
       const homeScore = m.home_score ?? 0;
       const awayScore = m.away_score ?? 0;
 
@@ -342,8 +344,9 @@ export function aggregatePlayerStats(
       });
 
       // Goalkeepers: clean sheets, goals conceded, saves and penalty saves.
+      // Forfeits strictly never award clean sheets or clean sheet points.
       const creditKeeper = (gkId: number | null, conceded: number, saves: number, penSaves: number) => {
-        if (!gkId || !playerMap[gkId]) return;
+        if (!gkId || !playerMap[gkId] || isForfeit) return;
         const gk = playerMap[gkId];
         gk.matches_as_gk = (gk.matches_as_gk || 0) + 1;
         gk.goals_conceded = (gk.goals_conceded || 0) + conceded;
@@ -357,7 +360,7 @@ export function aggregatePlayerStats(
 
       // Defenders share clean sheets (the keeper is credited above).
       const creditDefenders = (teamId: number, conceded: number, gkId: number | null) => {
-        if (conceded !== 0) return;
+        if (conceded !== 0 || isForfeit) return;
         players
           .filter((p) => p.team_id === teamId && p.position === 'Defender' && p.id !== gkId)
           .forEach((def) => {
@@ -368,11 +371,11 @@ export function aggregatePlayerStats(
       creditDefenders(m.away_team_id, homeScore, awayGKId);
     }
 
-    if (m.mvp_player_id && playerMap[m.mvp_player_id]) {
+    if (!isForfeit && m.mvp_player_id && playerMap[m.mvp_player_id]) {
       playerMap[m.mvp_player_id].mvps = (playerMap[m.mvp_player_id].mvps || 0) + 1;
     }
 
-    if (!m.events) continue;
+    if (isForfeit || !m.events) continue;
     const isKeeperHere = (playerId: number) => playerId === homeGKId || playerId === awayGKId;
     for (const ev of m.events) {
       const p = playerMap[ev.player_id];
@@ -567,8 +570,8 @@ export function aggregatePlayerStats(
       };
     });
 
-  // 6. Player of the Tournament (with min 3 appearances eligibility check)
-  const minApps = customMinAppearances;
+  // 6. Player of the Tournament (ranked purely by performance points)
+  const minApps = customMinAppearances ?? 1;
   const playerOfTheTournament = allPlayersWithStats
     .filter((p) => (p.overall_points || 0) > 0 || (p.mvps || 0) > 0 || (p.goals || 0) > 0)
     .sort((a, b) => {

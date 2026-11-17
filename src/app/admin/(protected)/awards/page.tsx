@@ -82,7 +82,7 @@ export default function AdminAwardsPage() {
     gk_save: 1,
     gk_penalty_save: 5,
   });
-  const [minAppearances, setMinAppearances] = useState<number>(3);
+  const [minAppearances, setMinAppearances] = useState<number>(1);
 
   const fetchAwardsData = async () => {
     try {
@@ -690,7 +690,7 @@ export default function AdminAwardsPage() {
                 Player of the Tournament
               </h2>
               <p className="text-xs text-slate-400 max-w-xl">
-                Automatically ranked by performance points: Goals (+{weights.goal}), Assists (+{weights.assist}), MOTM (+{weights.motm}), GK Clean Sheet (+{weights.gk_clean_sheet}), DEF Clean Sheet (+{weights.def_clean_sheet}), Cards ({weights.yellow_card}/{weights.red_card}). Minimum {minAppearances} appearances required for automatic eligibility.
+                Automatically ranked by performance points: Goals (+{weights.goal}), Assists (+{weights.assist}), MOTM (+{weights.motm}), GK Clean Sheet (+{weights.gk_clean_sheet}), DEF Clean Sheet (+{weights.def_clean_sheet}), Cards ({weights.yellow_card}/{weights.red_card}). {minAppearances <= 1 ? 'All active tournament players are eligible.' : `Minimum ${minAppearances} appearances required for automatic eligibility.`}
               </p>
             </div>
 
@@ -718,7 +718,9 @@ export default function AdminAwardsPage() {
                 <Crown className="w-4 h-4 text-amber-400" />
                 <span>Performance Ranking ({playerOfTheTournament.length} Candidates)</span>
               </h3>
-              <span className="text-xs text-slate-400 font-mono">Min {minAppearances} Apps Required</span>
+              <span className="text-xs text-slate-400 font-mono">
+                {minAppearances <= 1 ? 'All Active Players Eligible' : `Min ${minAppearances} Apps Required`}
+              </span>
             </div>
 
             <div className="overflow-x-auto">
@@ -786,8 +788,8 @@ export default function AdminAwardsPage() {
                               Yes
                             </span>
                           ) : (
-                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-700 text-slate-400" title={`Needs at least ${minAppearances} matches`}>
-                              &lt; {minAppearances} Apps
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-700 text-slate-400" title={`Needs at least ${minAppearances} match${minAppearances > 1 ? 'es' : ''}`}>
+                              &lt; {minAppearances} {minAppearances === 1 ? 'App' : 'Apps'}
                             </span>
                           )}
                         </td>
@@ -1308,7 +1310,7 @@ export default function AdminAwardsPage() {
                   min="1"
                   max="10"
                   value={minAppearances}
-                  onChange={(e) => setMinAppearances(parseInt(e.target.value) || 3)}
+                  onChange={(e) => setMinAppearances(parseInt(e.target.value) || 1)}
                   className="w-full bg-pitch-darkest border border-pitch-border rounded-xl p-2.5 text-xs text-white font-mono font-bold"
                 />
               </div>
