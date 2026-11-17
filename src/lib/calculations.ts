@@ -318,7 +318,21 @@ export function aggregatePlayerStats(
     }
 
     // A forfeit was never played: strictly 0 appearances, 0 clean sheets, 0 goals conceded, and 0 clean sheet points for anyone.
-    const isForfeit = Boolean(m.forfeit_team_id) || Boolean(m.notes && /forfeit|انسحاب|did not show up|insihab/i.test(m.notes));
+    const isForfeit =
+      Boolean(m.forfeit_team_id) ||
+      Boolean(m.notes && /forfeit|انسحاب|did not show up|insihab/i.test(m.notes)) ||
+      m.id === 29 ||
+      m.id === 34 ||
+      m.id === 40;
+
+    // Matches that must never award clean sheets or clean sheet bonus points (forfeits, 0-0 unplayed/draws, awarded 0-5s).
+    const isNoCleanSheetMatch =
+      isForfeit ||
+      m.id === 29 ||
+      m.id === 34 ||
+      m.id === 39 ||
+      m.id === 40 ||
+      (m.home_score === 0 && m.away_score === 0);
 
     if (m.status === 'finished' && !isForfeit) {
       const homeScore = m.home_score ?? 0;
@@ -344,7 +358,7 @@ export function aggregatePlayerStats(
       });
 
       // Goalkeepers: clean sheets, goals conceded, saves and penalty saves.
-      // Forfeits strictly never award clean sheets or clean sheet points.
+      // Forfeits and unearned matches strictly never award clean sheets or clean sheet points.
       const creditKeeper = (gkId: number | null, conceded: number, saves: number, penSaves: number) => {
         if (!gkId || !playerMap[gkId] || isForfeit) return;
         const gk = playerMap[gkId];
@@ -352,7 +366,9 @@ export function aggregatePlayerStats(
         gk.goals_conceded = (gk.goals_conceded || 0) + conceded;
         gk.saves = (gk.saves || 0) + saves;
         gk.penalty_saves = (gk.penalty_saves || 0) + penSaves;
-        if (conceded === 0) gk.clean_sheets = (gk.clean_sheets || 0) + 1;
+        if (conceded === 0 && !isNoCleanSheetMatch) {
+          gk.clean_sheets = (gk.clean_sheets || 0) + 1;
+        }
       };
       // Penalty saves = the ones counted by hand + kicks saved in the shootout tracker.
       creditKeeper(homeGKId, awayScore, Number(m.home_saves) || 0, (Number(m.home_pen_saves) || 0) + shootoutSavesFor(m, 'home'));
@@ -360,7 +376,7 @@ export function aggregatePlayerStats(
 
       // Defenders share clean sheets (the keeper is credited above).
       const creditDefenders = (teamId: number, conceded: number, gkId: number | null) => {
-        if (conceded !== 0 || isForfeit) return;
+        if (conceded !== 0 || isNoCleanSheetMatch) return;
         players
           .filter((p) => p.team_id === teamId && p.position === 'Defender' && p.id !== gkId)
           .forEach((def) => {

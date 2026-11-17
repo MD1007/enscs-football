@@ -525,6 +525,10 @@ export function applyRosterCorrections() {
     runOnce('pot_min_apps_1_v1', () => {
       db.prepare("UPDATE tournament_settings SET value = '1' WHERE key = 'pot_min_appearances'").run();
     });
+    runOnce('mark_forfeit_matches_39_40_v1', () => {
+      db.prepare("UPDATE matches SET forfeit_team_id = 21, notes = 'forfeit' WHERE id = 39 AND (forfeit_team_id IS NULL OR notes IS NULL)").run();
+      db.prepare("UPDATE matches SET forfeit_team_id = 23, notes = 'forfeit' WHERE id = 40 AND (forfeit_team_id IS NULL OR notes IS NULL)").run();
+    });
 
     // Only on a database that already holds the tournament (not on an empty/fresh one).
     const hasResults = db.prepare(`SELECT 1 FROM matches WHERE status = 'finished' LIMIT 1`).get();
